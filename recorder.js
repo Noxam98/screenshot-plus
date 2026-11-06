@@ -66,11 +66,14 @@ const MP4_MUX =
 // Voice from the default microphone: mono AAC, which every player handles.
 const AUDIO_BITRATE = 96000;
 
-function microphoneBranch() {
+// `device` is a PipeWire node name, which PipeWire's Pulse server takes as a
+// source name, or empty for the default microphone.
+function microphoneBranch(device) {
     const encoder = Gst.ElementFactory.find('fdkaacenc')
         ? `fdkaacenc rate-control=cbr bitrate=${AUDIO_BITRATE}`
         : `avenc_aac bitrate=${AUDIO_BITRATE}`;
-    return `pulsesrc client-name="Screenshot Plus" !
+    const source = device ? ` device="${device}"` : '';
+    return `pulsesrc client-name="Screenshot Plus"${source} !
         queue !
         audioconvert !
         audioresample !
@@ -172,11 +175,15 @@ class Recorder {
 
         const {x, y, width, height, scale} = request;
         this._expected = [Math.round(width * scale), Math.round(height * scale)];
-        // With the microphone first, then the same without it: a missing or
-        // refused microphone must not cost the recording.
+        // The chosen microphone first, then the default one, then none: an
+        // unplugged or refused microphone must not cost the recording.
         const video = candidates(...this._expected, request.codec ?? 'av1');
-        const withSound = request.microphone
-            ? video.map(c => ({...c, id: `${c.id}+mic`, microphone: true})) : [];
+        const chosen = /^[\w.:@-]+$/.test(request.microphoneDevice ?? '')
+            ? request.microphoneDevice : '';
+        const microphones = !request.microphone ? []
+            : chosen ? [[chosen, '+mic'], ['', '+mic-default']] : [['', '+mic']];
+        const withSound = microphones.flatMap(([device, suffix]) =>
+            video.map(c => ({...c, id: c.id + suffix, microphone: true, device})));
         this._queue = [...withSound, ...video];
         this._area = [x, y, width, height];
     }
@@ -250,7 +257,7 @@ class Recorder {
             ${this._current.pipeline} !
             queue !
             mux.
-            ${this._current.microphone ? microphoneBranch() : ''}
+            ${this._current.microphone ? microphoneBranch(this._current.device) : ''}
             ${MP4_MUX} !
             filesink location="${this._request.path}"`;
 

@@ -288,6 +288,7 @@ export class RecorderClient {
         // GNOME's recorder has no sound, so H.264 with the microphone is ours too.
         const codec = this._settings.get_string('video-codec') === 'av1' ? 'av1' : 'h264';
         const microphone = this._settings.get_boolean('record-microphone');
+        const microphoneDevice = this._settings.get_string('microphone-device');
         if (codec === 'h264' && !microphone)
             return native();
 
@@ -301,6 +302,7 @@ export class RecorderClient {
             path: expandTemplate(template),
             codec,
             microphone,
+            microphoneDevice,
         }, {
             onEnded: () => {
                 const wasCurrent = this._current === process;
@@ -320,8 +322,10 @@ export class RecorderClient {
 
         try {
             const path = await process.start();
-            if (microphone && !process.id.endsWith('+mic'))
+            if (microphone && !process.id.includes('+mic'))
                 Main.notify(t('mic.withoutSound'), '');
+            else if (process.id.endsWith('+mic-default'))
+                Main.notify(t('mic.defaultInstead'), '');
             return [true, path];
         } catch (e) {
             if (this._current === process)

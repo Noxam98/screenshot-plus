@@ -97,7 +97,8 @@ Open them from the Extensions app, or with
   native speaker, so corrections are welcome: the strings are in `translations.js`.
 - **Screenshot sound.** Soft click, GNOME's shutter, or none.
 - **Recording codec.** AV1 or H.264.
-- **Microphone.** Records sound from the default microphone along with the screen.
+- **Microphone.** Records sound from a microphone along with the screen, and which one:
+  the default or any connected microphone. The list follows headsets being plugged in.
 
 ## Recording
 
@@ -105,8 +106,11 @@ The codec is chosen in the settings or with the `AV1`/`H.264` button in recordin
 mode. `H.264` is GNOME's own recorder, for when compatibility matters.
 
 The microphone button next to it (and the same switch in the settings) adds sound
-from the default microphone: mono AAC at 96 kbit/s, which every player handles and
-which barely adds to the file. GNOME's recorder cannot record sound, so H.264 with the
+from a microphone: mono AAC at 96 kbit/s, which every player handles and which barely
+adds to the file. The small arrow beside the button lists the microphones, so the right
+one can be picked just before recording, and picking one turns sound on. The tooltip
+of the button says which one is in use. If the chosen microphone is unplugged, the
+default one records instead, with a notification. GNOME's recorder cannot record sound, so H.264 with the
 microphone goes through this extension's recorder as well, on NVENC or else on the
 CPU. If the microphone cannot be opened, the recording goes on without sound and a
 notification says so.

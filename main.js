@@ -14,6 +14,7 @@ import {ScreenshotUI, Tooltip} from 'resource:///org/gnome/shell/ui/screenshot.j
 import {Annotator} from './annotator.js';
 import {destroyNotificationSource} from './exporter.js';
 import {setLanguage, t} from './i18n.js';
+import {MicPicker} from './micPicker.js';
 import {RecorderClient} from './recorderClient.js';
 
 const CODEC_LABELS = {av1: 'AV1', h264: 'H.264'};
@@ -80,12 +81,14 @@ export class ScreenshotPlus {
                 setLanguage(settings.get_string('language'));
                 this._annotator.relabel();
                 this._codecTooltip.text = t('codec.tooltip');
-                this._micTooltip.text = t('mic.tooltip');
+                this._micPicker.relabel();
+                this._syncCodecButton();
                 // Its title is fixed when made, so the next one is made anew.
                 destroyNotificationSource();
             }),
             settings.connect('changed::video-codec', () => this._syncCodecButton()),
             settings.connect('changed::record-microphone', () => this._syncCodecButton()),
+            settings.connect('changed::microphone-label', () => this._syncCodecButton()),
         ];
     }
 
@@ -165,11 +168,12 @@ export class ScreenshotPlus {
                 this._settings.set_boolean('record-microphone', mic.checked);
         });
         ui._showPointerButtonContainer.insert_child_at_index(mic, 1);
+        this._micPicker = new MicPicker(ui, this._settings);
+        ui._showPointerButtonContainer.insert_child_at_index(this._micPicker.button, 2);
         // The bottom row overlaps its parts instead of widening the panel, so
-        // with two more buttons the panel has to be made wider by hand.
+        // with more buttons the panel has to be made wider by hand.
         ui._panel.add_style_class_name('splus-panel');
         this._micTooltip = new Tooltip(mic, {
-            text: t('mic.tooltip'),
             style_class: 'screenshot-ui-tooltip',
             visible: false,
         });
@@ -180,6 +184,13 @@ export class ScreenshotPlus {
             sync();
             mic.checked = this._settings.get_boolean('record-microphone');
             mic.visible = ui._castButton.checked;
+            this._micPicker.button.visible = ui._castButton.checked;
+            if (!ui._castButton.checked)
+                this._micPicker.close();
+            // Which microphone, so that it is clear without opening the settings.
+            const label = this._settings.get_string('microphone-device')
+                ? this._settings.get_string('microphone-label') : '';
+            this._micTooltip.text = label ? `${t('mic.tooltip')}: ${label}` : t('mic.tooltip');
         };
         this._syncCodecButton = syncAll;
 
@@ -196,6 +207,8 @@ export class ScreenshotPlus {
             tooltip.destroy();
         }
         Main.screenshotUI._panel.remove_style_class_name('splus-panel');
+        this._micPicker.destroy();
+        this._micPicker = null;
         this._codecButton.destroy();
         this._micButton.destroy();
         this._codecButton = null;

@@ -169,5 +169,39 @@
 }
 
 .screenshot-ui-panel.splus-panel {
-  min-width: 340px;
+  min-width: 384px;
+}
+
+.splus-mic-more {
+  border-radius: 6px;
+  padding: 10px 3px;
+  margin-right: 4px;
+  color: #eeeeec;
+}
+
+.splus-mic-more:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.splus-mic-menu {
+  background-color: rgba(36, 36, 40, 0.97);
+  border-radius: 12px;
+  padding: 6px;
+  spacing: 2px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+.splus-mic-item {
+  border-radius: 8px;
+  padding: 7px 12px 7px 8px;
+  color: #eeeeec;
+  font-size: 13px;
+}
+
+.splus-mic-item:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.splus-mic-item-box {
+  spacing: 8px;
 }
