@@ -77,3 +77,7 @@ gnome-extensions enable screenshot-plus@maksym   # после перезаход
 `tests/session.sh` поднимает отдельную GNOME Shell без экрана со своими `HOME`, dconf
 и D-Bus, реальный сеанс она не трогает. `tests/ctl.sh` управляет ею и шлёт ввод,
 `tests/stop.sh` останавливает. `gjs -m tests/shapes-test.js` проверяет геометрию.
+
+## Лицензия
+
+GPL-2.0-or-later, как у самой GNOME Shell. Текст в `LICENSE`.
