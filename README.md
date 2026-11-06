@@ -1,132 +1,140 @@
 # Screenshot Plus
 
-Расширение GNOME Shell 50: рисование поверх родного скриншотера в стиле Flameshot
-и запись экрана в AV1 на видеокарте. Родное окно по `Print` остаётся тем же, к нему
-добавляется панель инструментов.
+**English** · [Русский](README.ru.md)
 
-![Рисование](docs/drawing.gif)
+A GNOME Shell 50 extension that adds Flameshot-style drawing to the built-in
+screenshot tool, and records the screen to AV1 on the GPU. `Print` still opens the
+same native screenshot UI, now with a toolbar.
 
-## Рисование
+The demos below show the interface in Russian. It follows the system language, see
+[Settings](#settings).
 
-- Карандаш, линия, стрелка, прямоугольник, эллипс, маркер, текст, пиксели и цифры.
-- Десять цветов. Толщина задаётся ползунком или колесом мыши, и у каждого инструмента
-  она своя: тонкий карандаш и толстый маркер не сбивают друг друга.
-- Цифра ставится щелчком, а если протянуть, от неё идёт стрелка. Нумерация общая.
-- Пиксели закрывают пароли и прочее, что не должно попасть в снимок. В файле на этом
-  месте только блоки, исходных пикселей там нет.
-- `Shift` при рисовании даёт ровно 45° и квадрат.
-- Копировать и сохранить можно по отдельности. Окно закрывается в момент нажатия, а
-  снимок дописывается в фоне. Если сохранить не удалось, снимок остаётся в буфере
-  обмена, и приходит уведомление.
-- Вместо громкого затвора звучит короткий тихий щелчок, и у снимков по сочетаниям
-  самого GNOME тоже. Это меняется в настройках.
+![Drawing](docs/drawing.gif)
 
-## Текст
+## Drawing
 
-![Текст](docs/text.gif)
+- Pen, line, arrow, rectangle, ellipse, highlighter, text, pixelate and numbers.
+- Ten colours. Width is set with a slider or the mouse wheel, and every tool keeps its
+  own: a thin pen and a thick highlighter do not overwrite each other.
+- A click places a number; drag instead and it gets an arrow. Numbering runs across
+  all of them.
+- Pixelate hides passwords and anything else that must not end up in the picture. The
+  file holds only the blocks there, none of the original pixels.
+- `Shift` while drawing gives exact 45° steps and squares.
+- Copy and save are separate. The window closes the moment you press either, and the
+  image is finished in the background. If saving fails, the image is left on the
+  clipboard and a notification says so.
+- Instead of the loud shutter you get a short soft click, also for screenshots taken
+  with GNOME's own shortcuts. This can be changed in the settings.
 
-- Отдельно настраиваются цвет букв, обводка и фон, у фона ещё плотность, высота и
-  ширина.
-- По бокам две ручки. Пока тянешь одну, вторая стоит на месте, а текст
-  поворачивается и масштабируется вокруг неё, плавно и без скачков. С `Shift` угол идёт
-  шагами по 15°, возле прямого положения прилипает.
-- Ручка сверху перемещает надпись.
-- Двойной щелчок правит текст. Повёрнутый остаётся повёрнутым, новые буквы идут вдоль
-  него. Вставка из буфера работает.
+## Text
 
-## Правка нарисованного
+![Text](docs/text.gif)
 
-![Правка](docs/editing.gif)
+- Letter colour, outline and background are set separately, the background also with
+  its opacity, height and width.
+- Two handles on the sides. While you drag one, the other stays put, and the text turns
+  and scales around it, smoothly and without jumps. With `Shift` the angle moves in 15°
+  steps, and it snaps near level.
+- The handle on top moves the text.
+- Double-click edits it. Turned text stays turned and new letters run along it. Pasting
+  from the clipboard works.
 
-Инструмент выбора (`0`) берёт любую фигуру. Её можно таскать, тянуть за ручки,
-перекрашивать, менять толщину колесом, удалять клавишей `Delete`. У цифры со стрелкой
-кружок двигается отдельно, и стрелка продолжает указывать туда же, остриё тоже
-двигается отдельно, а за саму стрелку двигается всё вместе. Всё отменяется `Ctrl+Z`.
+## Editing what is drawn
 
-## Выделение
+![Editing](docs/editing.gif)
 
-![Выделение](docs/selection.gif)
+The select tool (`0`) picks up any shape. Drag it, pull its handles, recolour it,
+change its width with the wheel, remove it with `Delete`. A number with an arrow has
+parts: the circle moves on its own and the arrow keeps pointing at the same spot, the
+tip moves on its own too, and dragging the arrow itself moves everything. `Ctrl+Z`
+undoes any of it.
 
-- С любым инструментом нажатие за пределами поля выделяет его заново, а углы и края
-  поля тянутся как без инструмента. Курсор меняется, и рядом с ним написано, что будет:
-  «Новое выделение» или «Размер выделения».
-- Случайный щелчок мимо поля его не сбрасывает.
-- Нарисованное не пропадает, когда поле меняется: всё, что оказалось снаружи,
-  приглушено вместе с экраном. В снимок попадает только то, что внутри.
-- Выделение может идти через оба монитора, как в родном окне. Панель встаёт на тот
-  монитор, где выделения больше.
+## Selection
 
-## Клавиши
+![Selection](docs/selection.gif)
 
-| Клавиша | Действие |
+- With any tool, pressing outside the selection starts a new one, and its corners and
+  edges resize it as they do without a tool. The pointer changes, and a label next to
+  it says which will happen: "New selection" or "Resize selection".
+- A stray click outside does not throw the selection away.
+- Drawings stay when the selection changes: whatever ends up outside is dimmed along
+  with the screen. Only what is inside goes into the picture.
+- The selection can span both monitors, as in the native UI. The toolbar sits on the
+  monitor that holds most of the selection.
+
+## Keys
+
+| Key | Action |
 |---|---|
-| `1`–`9` | карандаш, линия, стрелка, прямоугольник, эллипс, маркер, текст, пиксели, цифра |
-| `0` | выбор: взять уже нарисованное |
-| `Ctrl+C` | только копировать |
-| `Ctrl+S` | только сохранить |
-| `Enter` или круглая кнопка | сохранить и скопировать |
-| `Ctrl+Z`, `Ctrl+Shift+Z` | отменить, вернуть |
-| `Delete` | удалить выбранное |
-| `Esc` | снять выделение, затем закрыть |
-| колесо | толщина, размер текста |
-| `Shift` при рисовании | ровно под 45° и квадратом |
+| `1`–`9` | pen, line, arrow, rectangle, ellipse, highlighter, text, pixelate, number |
+| `0` | select: pick up what is already drawn |
+| `Ctrl+C` | copy only |
+| `Ctrl+S` | save only |
+| `Enter` or the round button | save and copy |
+| `Ctrl+Z`, `Ctrl+Shift+Z` | undo, redo |
+| `Delete` | delete the selected shape |
+| `Esc` | deselect, then close |
+| mouse wheel | width, text size |
+| `Shift` while drawing | exact 45° and squares |
 
-Сочетания привязаны к физическим клавишам, поэтому работают в любой раскладке.
+Shortcuts are bound to physical keys, so they work with any keyboard layout.
 
-## Настройки
+## Settings
 
-![Настройки](docs/settings.png)
+![Settings](docs/settings.png)
 
-Открываются из приложения «Расширения» или командой
+Open them from the Extensions app, or with
 `gnome-extensions prefs screenshot-plus@maksym`.
 
-- **Язык.** По умолчанию язык системы, а если перевода на него нет, английский.
-  Есть English, русский, українська, Deutsch, français, español, português, italiano,
-  polski, norsk bokmål, Türkçe, 日本語, 简体中文 и эсперанто. Переводы, кроме русского и
-  английского, сделаны без носителей языка, исправления приветствуются: строки лежат
-  в `translations.js`.
-- **Звук снимка.** Тихий щелчок, затвор GNOME или без звука.
-- **Кодек записи.** AV1 или H.264.
+- **Language.** The system language by default, or English when there is no
+  translation for it. Available: English, Russian, Ukrainian, German, French, Spanish,
+  Portuguese, Italian, Polish, Norwegian Bokmål, Turkish, Japanese, Simplified Chinese
+  and Esperanto. Translations other than English and Russian were written without a
+  native speaker, so corrections are welcome: the strings are in `translations.js`.
+- **Screenshot sound.** Soft click, GNOME's shutter, or none.
+- **Recording codec.** AV1 or H.264.
 
-## Запись
+## Recording
 
-Кодек выбирается в настройках или кнопкой `AV1`/`H.264` в режиме записи. `H.264` это
-родной рекордер GNOME, когда важна совместимость. Для AV1 рекордер выбирает первый
-подходящий путь:
+The codec is chosen in the settings or with the `AV1`/`H.264` button in recording
+mode. `H.264` is GNOME's own recorder, for when compatibility matters. For AV1 the
+recorder takes the first path that fits:
 
-1. `amd-av1-dmabuf`: кодер AMD без копирования кадров. Только если ширина кратна 64,
-   а высота 16, иначе он добавляет чёрные поля (1920×1080 станет 1920×1082).
-2. `nvenc-av1`: NVENC, кадры идут через оперативную память. Сторона от 200 пикселей.
-3. Родной рекордер GNOME: при любом сбое запуска и для совсем маленьких областей.
+1. `amd-av1-dmabuf`: the AMD encoder with no frame copies. Only when the width is a
+   multiple of 64 and the height of 16, otherwise it adds black bars (1920×1080
+   becomes 1920×1082).
+2. `nvenc-av1`: NVENC, with frames going through system memory. Sides from 200 pixels.
+3. GNOME's own recorder: on any start-up failure, and for very small areas.
 
-Рекордер работает отдельным процессом (`recorder.js`), поэтому его падение не роняет
-оболочку. Используемый путь пишется в журнал:
+The recorder runs as a separate process (`recorder.js`), so if it crashes, the shell
+does not. The path in use is written to the journal:
 `journalctl --user -b -g 'screenshot-plus'`.
 
-## Установка и откат
+## Install and remove
 
 ```sh
 git clone https://github.com/Noxam98/screenshot-plus ~/src/screenshot-plus
 ln -s ~/src/screenshot-plus ~/.local/share/gnome-shell/extensions/screenshot-plus@maksym
 glib-compile-schemas ~/src/screenshot-plus/schemas
-gnome-extensions enable screenshot-plus@maksym   # после перезахода в сеанс
+gnome-extensions enable screenshot-plus@maksym   # after logging in again
 ```
 
-Выключить: `gnome-extensions disable screenshot-plus@maksym`.
+To turn it off: `gnome-extensions disable screenshot-plus@maksym`.
 
-## Применить изменения кода
+## Applying code changes
 
-`./reload.sh`, без перезахода в сеанс. GNOME кеширует модули по пути на весь сеанс,
-поэтому `extension.js` при каждом включении копирует код в новую папку в
-`$XDG_RUNTIME_DIR/screenshot-plus` и запускает его оттуда. Перезаход нужен, только
-если менялись сам `extension.js` или `metadata.json`.
+Run `./reload.sh`, no new login needed. GNOME caches modules by path for the whole
+session, so `extension.js` copies the code to a new folder under
+`$XDG_RUNTIME_DIR/screenshot-plus` on every enable and runs it from there. A new login
+is needed only when `extension.js` or `metadata.json` themselves change.
 
-## Тесты
+## Tests
 
-`tests/session.sh` поднимает отдельную GNOME Shell без экрана со своими `HOME`, dconf
-и D-Bus, реальный сеанс она не трогает. `tests/ctl.sh` управляет ею и шлёт ввод,
-`tests/stop.sh` останавливает. `gjs -m tests/shapes-test.js` проверяет геометрию.
+`tests/session.sh` starts a separate GNOME Shell with no screen and its own `HOME`,
+dconf and D-Bus, so the real session is left alone. `tests/ctl.sh` drives it and sends
+input, `tests/stop.sh` stops it. `gjs -m tests/shapes-test.js` checks the geometry.
 
-## Лицензия
+## License
 
-GPL-2.0-or-later, как у самой GNOME Shell. Текст в `LICENSE`.
+GPL-2.0-or-later, like GNOME Shell itself. The text is in `LICENSE`.
