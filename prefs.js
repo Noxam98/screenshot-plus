@@ -8,6 +8,7 @@ import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
+import {unpluggedSourcesSync} from './audioDevices.js';
 import {LANGUAGE_CODES, languageName, setLanguage, systemLanguage, t} from './i18n.js';
 
 const SOUNDS = ['soft', 'gnome', 'none'];
@@ -15,12 +16,14 @@ const SOUND_LABELS = ['prefs.soundSoft', 'prefs.soundGnome', 'prefs.soundNone'];
 const CODECS = ['av1', 'h264'];
 
 // Microphones as PipeWire lists them: [node name, readable name]. Monitors of
-// outputs are sinks there, so they do not show up.
+// outputs are sinks there, so they do not show up, and inputs with nothing
+// plugged in are left out.
 function listMicrophones(monitor) {
+    const unplugged = unpluggedSourcesSync();
     return monitor.get_devices().map(device => [
         device.get_properties()?.get_string('node.name') ?? null,
         device.display_name,
-    ]).filter(([node]) => node);
+    ]).filter(([node]) => node && !unplugged.has(node));
 }
 
 // A drop-down row bound to a string key, one entry per value.

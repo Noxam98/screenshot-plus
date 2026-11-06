@@ -205,3 +205,12 @@
 .splus-mic-item-box {
   spacing: 8px;
 }
+
+.splus-quiet-recording .screenshot-ui-area-indicator-shade {
+  background-color: transparent;
+}
+
+/* Just outside the recorded area; its width is FRAME_WIDTH in main.js. */
+.splus-recording-frame {
+  border: 2px solid rgba(224, 27, 36, 0.85);
+}

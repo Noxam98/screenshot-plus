@@ -17,6 +17,8 @@ import GioUnix from 'gi://GioUnix';
 import Gst from 'gi://Gst?version=1.0';
 import {programArgs, exit} from 'system';
 
+import {MicrophoneGain, microphoneChain} from './micChain.js';
+
 const ScreenCastIface = `<node>
   <interface name="org.gnome.Mutter.ScreenCast">
     <method name="CreateSession">
@@ -63,23 +65,11 @@ const START_TIMEOUT_SECONDS = 3;
 const MP4_MUX =
     'mp4mux name=mux fragment-duration=500 fragment-mode=first-moov-then-finalise';
 
-// Voice from the default microphone: mono AAC, which every player handles.
-const AUDIO_BITRATE = 96000;
-
 // `device` is a PipeWire node name, which PipeWire's Pulse server takes as a
 // source name, or empty for the default microphone.
 function microphoneBranch(device) {
-    const encoder = Gst.ElementFactory.find('fdkaacenc')
-        ? `fdkaacenc rate-control=cbr bitrate=${AUDIO_BITRATE}`
-        : `avenc_aac bitrate=${AUDIO_BITRATE}`;
     const source = device ? ` device="${device}"` : '';
-    return `pulsesrc client-name="Screenshot Plus"${source} !
-        queue !
-        audioconvert !
-        audioresample !
-        audio/x-raw,channels=1,rate=48000 !
-        ${encoder} !
-        aacparse !
+    return `${microphoneChain(`pulsesrc client-name="Screenshot Plus"${source}`)} !
         queue !
         mux.`;
 }
@@ -269,6 +259,8 @@ class Recorder {
             return;
         }
 
+        this._micGain = this._current.microphone ? new MicrophoneGain(this._pipeline) : null;
+
         const bus = this._pipeline.get_bus();
         bus.add_signal_watch();
         bus.connect('message', (_b, message) => this._onMessage(message));
@@ -286,6 +278,9 @@ class Recorder {
 
     _onMessage(message) {
         switch (message.type) {
+        case Gst.MessageType.ELEMENT:
+            this._micGain?.handle(message);
+            break;
         case Gst.MessageType.STATE_CHANGED: {
             if (message.src !== this._pipeline || this._state !== State.STARTING)
                 break;

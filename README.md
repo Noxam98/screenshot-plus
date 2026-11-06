@@ -106,14 +106,20 @@ The codec is chosen in the settings or with the `AV1`/`H.264` button in recordin
 mode. `H.264` is GNOME's own recorder, for when compatibility matters.
 
 The microphone button next to it (and the same switch in the settings) adds sound
-from a microphone: mono AAC at 96 kbit/s, which every player handles and which barely
-adds to the file. The small arrow beside the button lists the microphones, so the right
+from a microphone, cleaned up for voice the way video calls do it: noise suppression,
+a cut of low hum, and a gentle automatic gain of up to +20 dB for quiet laptop
+microphones, with a limiter against loud peaks. It is stored as mono AAC at
+128 kbit/s, which every player handles and which barely adds to the file. Inputs
+with nothing plugged in, such as an empty headset jack, are left out of the lists. The small arrow beside the button lists the microphones, so the right
 one can be picked just before recording, and picking one turns sound on. The tooltip
 of the button says which one is in use. If the chosen microphone is unplugged, the
 default one records instead, with a notification. GNOME's recorder cannot record sound, so H.264 with the
 microphone goes through this extension's recorder as well, on NVENC or else on the
 CPU. If the microphone cannot be opened, the recording goes on without sound and a
 notification says so.
+
+While an area records, the rest of the screen is not dimmed as GNOME does; a thin
+red frame just outside the area marks it and never gets into the video.
 
 When a recording ends, its notification stays in the list until dismissed: click it
 to watch the video, or "Show in Files" opens the folder with the video selected.

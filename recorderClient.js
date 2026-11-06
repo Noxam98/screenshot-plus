@@ -9,6 +9,7 @@ import Mtk from 'gi://Mtk';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import {unpluggedSources} from './audioDevices.js';
 import {t} from './i18n.js';
 
 const SCREENCAST_PHASE_RECORDING = 'RECORDING';
@@ -288,7 +289,14 @@ export class RecorderClient {
         // GNOME's recorder has no sound, so H.264 with the microphone is ours too.
         const codec = this._settings.get_string('video-codec') === 'av1' ? 'av1' : 'h264';
         const microphone = this._settings.get_boolean('record-microphone');
-        const microphoneDevice = this._settings.get_string('microphone-device');
+        let microphoneDevice = this._settings.get_string('microphone-device');
+        // An unplugged input would record silence without failing, so the
+        // default microphone takes over before the recorder even starts.
+        let defaultInstead = false;
+        if (microphone && microphoneDevice && (await unpluggedSources()).has(microphoneDevice)) {
+            microphoneDevice = '';
+            defaultInstead = true;
+        }
         if (codec === 'h264' && !microphone)
             return native();
 
@@ -324,7 +332,7 @@ export class RecorderClient {
             const path = await process.start();
             if (microphone && !process.id.includes('+mic'))
                 Main.notify(t('mic.withoutSound'), '');
-            else if (process.id.endsWith('+mic-default'))
+            else if (defaultInstead || process.id.endsWith('+mic-default'))
                 Main.notify(t('mic.defaultInstead'), '');
             return [true, path];
         } catch (e) {

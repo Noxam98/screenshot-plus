@@ -17,6 +17,9 @@ import {setLanguage, t} from './i18n.js';
 import {MicPicker} from './micPicker.js';
 import {RecorderClient} from './recorderClient.js';
 
+// Matches the border in stylesheet.css.
+const FRAME_WIDTH = 2;
+
 const CODEC_LABELS = {av1: 'AV1', h264: 'H.264'};
 
 export class ScreenshotPlus {
@@ -86,6 +89,7 @@ export class ScreenshotPlus {
             });
 
         this._buildCodecButton(ui);
+        this._buildRecordingFrame(ui);
         this._announcePrefs();
 
         this._settingsSignals = [
@@ -102,6 +106,32 @@ export class ScreenshotPlus {
             settings.connect('changed::record-microphone', () => this._syncCodecButton()),
             settings.connect('changed::microphone-label', () => this._syncCodecButton()),
         ];
+    }
+
+    // While an area records, GNOME dims the rest of the screen, which looks like a
+    // frozen desktop. Instead nothing is dimmed and a thin frame sits just
+    // outside the area, so it never ends up in the video.
+    _buildRecordingFrame(ui) {
+        const indicator = ui._screencastAreaIndicator;
+        indicator.add_style_class_name('splus-quiet-recording');
+
+        const frame = new St.Widget({style_class: 'splus-recording-frame'});
+        const area = indicator._selectionRect;
+        for (const [coordinate, offset] of [
+            [Clutter.BindCoordinate.X, -FRAME_WIDTH],
+            [Clutter.BindCoordinate.Y, -FRAME_WIDTH],
+            [Clutter.BindCoordinate.WIDTH, 2 * FRAME_WIDTH],
+            [Clutter.BindCoordinate.HEIGHT, 2 * FRAME_WIDTH],
+        ])
+            frame.add_constraint(new Clutter.BindConstraint({source: area, coordinate, offset}));
+        indicator.add_child(frame);
+        this._recordingFrame = frame;
+    }
+
+    _destroyRecordingFrame() {
+        Main.screenshotUI._screencastAreaIndicator.remove_style_class_name('splus-quiet-recording');
+        this._recordingFrame.destroy();
+        this._recordingFrame = null;
     }
 
     // GNOME checks for prefs.js once per session. When reload.sh brings in a
@@ -136,6 +166,7 @@ export class ScreenshotPlus {
         this._annotator = null;
 
         this._destroyCodecButton();
+        this._destroyRecordingFrame();
         destroyNotificationSource();
         this._settings = null;
     }
@@ -180,7 +211,7 @@ export class ScreenshotPlus {
                 this._settings.set_boolean('record-microphone', mic.checked);
         });
         ui._showPointerButtonContainer.insert_child_at_index(mic, 1);
-        this._micPicker = new MicPicker(ui, this._settings);
+        this._micPicker = new MicPicker(ui, this._settings, mic);
         ui._showPointerButtonContainer.insert_child_at_index(this._micPicker.button, 2);
         // The bottom row overlaps its parts instead of widening the panel, so
         // with more buttons the panel has to be made wider by hand.
