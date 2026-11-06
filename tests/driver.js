@@ -13,6 +13,12 @@ const wait = ms => new Promise(resolve => GLib.timeout_add(GLib.PRIORITY_DEFAULT
 
 export default class {
     enable() {
+        // It opens the shell to any code over D-Bus, so it works only in the
+        // throwaway shell that tests/session.sh starts.
+        if (GLib.getenv('SPLUS_TEST_SHELL') !== '1') {
+            console.error('testdriver: not in the test shell, staying off');
+            return;
+        }
         global.context.unsafe_mode = true;
         const seat = global.stage.context.get_backend().get_default_seat();
         const pointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);

@@ -12,7 +12,7 @@ import {ScreencastError, ScreencastErrors} from 'resource:///org/gnome/shell/mis
 import {ScreenshotUI, Tooltip} from 'resource:///org/gnome/shell/ui/screenshot.js';
 
 import {Annotator} from './annotator.js';
-import {destroyNotificationSource} from './exporter.js';
+import {destroyNotificationSource, notifyRecording, removeTempFiles} from './exporter.js';
 import {setLanguage, t} from './i18n.js';
 import {MicPicker} from './micPicker.js';
 import {RecorderClient} from './recorderClient.js';
@@ -29,6 +29,7 @@ export class ScreenshotPlus {
         const ui = Main.screenshotUI;
         const settings = this._settings;
         setLanguage(settings.get_string('language'));
+        removeTempFiles();
 
         this._annotator = new Annotator(ui, settings, this.path);
         this._annotator.enable();
@@ -71,6 +72,17 @@ export class ScreenshotPlus {
                 if (sound === 'soft' && click.query_exists(null))
                     return this.play_from_file(click, description, cancellable);
                 return original.call(this, name, description, cancellable);
+            });
+
+        // When a recording has a file, the notice about it offers the folder.
+        this._injections.overrideMethod(ScreenshotUI.prototype, '_showNotification',
+            original => function (title) {
+                const path = this._screencastPath;
+                if (!path || !GLib.file_test(path, GLib.FileTest.EXISTS))
+                    return original.call(this, title);
+                Main.overview.hide();
+                Main.panel.closeCalendar();
+                return notifyRecording(title, path);
             });
 
         this._buildCodecButton(ui);

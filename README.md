@@ -115,6 +115,9 @@ microphone goes through this extension's recorder as well, on NVENC or else on t
 CPU. If the microphone cannot be opened, the recording goes on without sound and a
 notification says so.
 
+When a recording ends, its notification stays in the list until dismissed: click it
+to watch the video, or "Show in Files" opens the folder with the video selected.
+
 For AV1 the recorder takes the first path that fits:
 
 1. `amd-av1-dmabuf`: the AMD encoder with no frame copies. Only when the width is a
@@ -126,6 +129,25 @@ For AV1 the recorder takes the first path that fits:
 The recorder runs as a separate process (`recorder.js`), so if it crashes, the shell
 does not. The path in use is written to the journal:
 `journalctl --user -b -g 'screenshot-plus'`.
+
+## Privacy and safety
+
+- Nothing leaves the computer: no network access, telemetry or downloads. Recording
+  goes from Mutter's screen cast API through PipeWire on this machine into a file.
+- The extension stays enabled while the screen is locked, so a recording in progress
+  keeps going. It starts nothing there: drawing is off on the lock screen, and only
+  what GNOME's own screenshot UI allows there can be done.
+- Pixelate: the saved image holds only the blocks. While the on-screen preview is
+  made, the selected area is written for a moment to a private file in
+  `$XDG_RUNTIME_DIR/screenshot-plus-tmp`, which is in memory, and deleted right away.
+  Anything left there after a crash is removed at the next start.
+- When an app asks for a screenshot, the app always gets the file, whichever button
+  was used. The image goes to the clipboard only with copy or `Enter`.
+- The microphone is recorded only while its toggle is on.
+- `tests/driver.js` lets any code run in the shell over D-Bus. It is not installed by
+  the steps below and stays off unless started by `tests/session.sh` in its own
+  throwaway shell. `tests/session.sh` wipes its work folder before each run and
+  refuses to wipe a folder it did not create.
 
 ## Install and remove
 

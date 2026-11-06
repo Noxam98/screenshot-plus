@@ -28,12 +28,40 @@ const _ = Gettext.domain('gnome-shell').gettext;
 
 let tempCounter = 0;
 
+// Temporary PNGs live a moment in a private folder in $XDG_RUNTIME_DIR, which is
+// in memory. One holds the original pixels behind a pixelated area while the
+// preview is made, so leftovers from a crash are removed at the next start.
+const TEMP_DIR = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'screenshot-plus-tmp']);
+
 function tempPath() {
     tempCounter++;
+    GLib.mkdir_with_parents(TEMP_DIR, 0o700);
     return GLib.build_filenamev([
-        GLib.get_user_runtime_dir(),
-        `screenshot-plus-${new Gio.Credentials().get_unix_pid()}-${tempCounter}.png`,
+        TEMP_DIR,
+        `${new Gio.Credentials().get_unix_pid()}-${tempCounter}.png`,
     ]);
+}
+
+function removeMatching(path, pattern) {
+    const dir = Gio.File.new_for_path(path);
+    try {
+        const children = dir.enumerate_children('standard::name',
+            Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
+        for (let info = children.next_file(null); info; info = children.next_file(null)) {
+            if (pattern.test(info.get_name()))
+                dir.get_child(info.get_name()).delete(null);
+        }
+        children.close(null);
+    } catch (e) {
+        if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
+            console.warn(`screenshot-plus: cannot clean ${path}: ${e.message}`);
+    }
+}
+
+export function removeTempFiles() {
+    removeMatching(TEMP_DIR, /\.png$/);
+    // Where earlier versions put them.
+    removeMatching(GLib.get_user_runtime_dir(), /^screenshot-plus-\d+-\d+\.png$/);
 }
 
 // write_bytes may stop short, which would leave a truncated PNG looking fine.
@@ -268,23 +296,54 @@ function notify(pixbuf, file, copied, time) {
         isTransient: true,
     });
 
-    if (file) {
-        notification.addAction(t('notify.showInFiles'), () => {
-            const app = Gio.app_info_get_default_for_type('inode/directory', false);
-            app?.launch([file], global.create_app_launch_context(0, -1));
-        });
-        notification.connect('activated', () => {
-            try {
-                Gio.app_info_launch_default_for_uri(
-                    file.get_uri(), global.create_app_launch_context(0, -1));
-            } catch (e) {
-                logError(e, 'screenshot-plus: cannot open screenshot');
-            }
-            Main.overview.hide();
-            Main.panel.closeCalendar();
-        });
-    }
+    if (file)
+        addFileActions(notification, file);
 
+    getSource().addNotification(notification);
+}
+
+// Opens the folder with the file selected, like "Show in Folder" in Files, and
+// falls back to just the folder when no file manager answers that.
+function showInFiles(file) {
+    Gio.DBus.session.call('org.freedesktop.FileManager1', '/org/freedesktop/FileManager1',
+        'org.freedesktop.FileManager1', 'ShowItems',
+        new GLib.Variant('(ass)', [[file.get_uri()], '']),
+        null, Gio.DBusCallFlags.NONE, -1, null, (connection, result) => {
+            try {
+                connection.call_finish(result);
+            } catch (e) {
+                console.debug(`screenshot-plus: ShowItems: ${e.message}`);
+                const app = Gio.app_info_get_default_for_type('inode/directory', false);
+                app?.launch([file.get_parent()], global.create_app_launch_context(0, -1));
+            }
+        });
+}
+
+function addFileActions(notification, file) {
+    notification.addAction(t('notify.showInFiles'), () => showInFiles(file));
+    notification.connect('activated', () => {
+        try {
+            Gio.app_info_launch_default_for_uri(
+                file.get_uri(), global.create_app_launch_context(0, -1));
+        } catch (e) {
+            logError(e, `screenshot-plus: cannot open ${file.get_path()}`);
+        }
+        Main.overview.hide();
+        Main.panel.closeCalendar();
+    });
+}
+
+// After a recording. GNOME's own notice disappears from the list after a few
+// seconds; this one stays until dismissed, so the video is easy to find again.
+export function notifyRecording(title, path) {
+    const file = Gio.File.new_for_path(path);
+    const notification = new MessageTray.Notification({
+        source: getSource(),
+        title,
+        body: `${file.get_basename()}\n${t('notify.video')}`,
+        isTransient: false,
+    });
+    addFileActions(notification, file);
     getSource().addNotification(notification);
 }
 

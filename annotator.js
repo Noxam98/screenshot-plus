@@ -1917,7 +1917,7 @@ export class Annotator {
         // An app asked for this screenshot, and it takes the UI closing before the
         // file exists as a cancel. That one has to finish first.
         if (this._ui._currentMode === UI_MODE_SCREENSHOT_ONLY)
-            return this._exportForApp();
+            return this._exportForApp(options);
 
         const job = beginExport(this._ui, this._shapes);
         // Nothing to capture, such as window mode with no window chosen. The UI
@@ -1934,7 +1934,9 @@ export class Annotator {
     }
 
     // On failure the UI stays open, so the capture and the drawing are not lost.
-    async _exportForApp() {
+    // The app gets its file whichever button was used; the clipboard gets the
+    // image only when copying was asked for.
+    async _exportForApp({copy}) {
         if (this._exporting)
             return;
         this._exporting = true;
@@ -1942,7 +1944,7 @@ export class Annotator {
             const job = beginExport(this._ui, this._shapes);
             if (!job)
                 return;
-            await finishExport(this._ui, job, {copy: true, save: true});
+            await finishExport(this._ui, job, {copy, save: true});
             this._ui.close();
         } catch (e) {
             logError(e, 'screenshot-plus: export failed');
