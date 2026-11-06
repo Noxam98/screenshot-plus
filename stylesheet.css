@@ -1,0 +1,153 @@
+.splus-toolbar {
+  background-color: rgba(36, 36, 40, 0.97);
+  border-radius: 14px;
+  padding: 5px;
+  spacing: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+.splus-row {
+  spacing: 2px;
+}
+
+.splus-text-row {
+  font-size: 12px;
+  color: #eeeeec;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  spacing: 4px;
+}
+
+.splus-slot {
+  border-radius: 8px;
+  padding: 4px 9px;
+  color: #eeeeec;
+  font-size: 12px;
+}
+
+.splus-slot:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.splus-slot:checked {
+  background-color: #3584e4;
+  color: #ffffff;
+}
+
+.splus-slot-box {
+  spacing: 6px;
+}
+
+.splus-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.splus-stepper {
+  spacing: 3px;
+  padding: 0 4px;
+}
+
+.splus-step-title {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  margin-right: 3px;
+}
+
+.splus-step-button {
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  color: #eeeeec;
+  font-weight: bold;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.splus-step-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.splus-step-value {
+  min-width: 30px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.splus-group {
+  spacing: 2px;
+}
+
+.splus-tool {
+  border-radius: 9px;
+  padding: 7px;
+  color: #eeeeec;
+}
+
+.splus-tool:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.splus-tool:active,
+.splus-tool:checked {
+  background-color: #3584e4;
+  color: #ffffff;
+}
+
+.splus-action {
+  color: #8ff0a4;
+}
+
+.splus-separator {
+  width: 1px;
+  background-color: rgba(255, 255, 255, 0.18);
+  margin: 4px 4px;
+}
+
+.splus-color {
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  margin: 0 2px;
+}
+
+.splus-color:hover {
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.splus-color:checked {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px #3584e4;
+}
+
+.splus-width-bin {
+  width: 28px;
+  height: 28px;
+}
+
+.splus-codec {
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-right: 8px;
+  font-weight: bold;
+  font-size: 12px;
+  color: #eeeeec;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.splus-codec:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.splus-cursor-hint {
+  background-color: rgba(36, 36, 40, 0.92);
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}

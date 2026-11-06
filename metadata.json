@@ -1,0 +1,9 @@
+{
+  "uuid": "screenshot-plus@maksym",
+  "name": "Screenshot Plus",
+  "description": "Рисование поверх снимка в стиле Flameshot, отдельные копирование и сохранение, запись экрана в AV1 на видеокарте.",
+  "shell-version": ["50"],
+  "settings-schema": "org.gnome.shell.extensions.screenshot-plus",
+  "session-modes": ["user", "unlock-dialog"],
+  "version": 1
+}
