@@ -16,7 +16,7 @@ J
 cp "$EXT/tests/driver.js" "$D/extension.js"
 export HOME="$W/home" XDG_CONFIG_HOME="$W/config" XDG_DATA_HOME="$W/data" XDG_CACHE_HOME="$W/cache"
 export PIPEWIRE_RUNTIME_DIR="$XDG_RUNTIME_DIR" XDG_RUNTIME_DIR="$RUN"
-export LANG=ru_RU.UTF-8 XDG_SESSION_TYPE=wayland GIO_USE_VFS=local GVFS_DISABLE_FUSE=1; unset DISPLAY WAYLAND_DISPLAY
+export LANG=${SPLUS_LANG:-ru_RU.UTF-8} XDG_SESSION_TYPE=wayland GIO_USE_VFS=local GVFS_DISABLE_FUSE=1; unset DISPLAY WAYLAND_DISPLAY
 export SPLUS_EXTENSIONS="${SPLUS_EXTENSIONS:-}"
 exec dbus-run-session -- bash -c '
   echo "$DBUS_SESSION_BUS_ADDRESS" > "'"$W"'/bus"

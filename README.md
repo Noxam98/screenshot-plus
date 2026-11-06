@@ -6,12 +6,15 @@ A GNOME Shell 50 extension that adds Flameshot-style drawing to the built-in
 screenshot tool, and records the screen to AV1 on the GPU. `Print` still opens the
 same native screenshot UI, now with a toolbar.
 
-The demos below show the interface in Russian. It follows the system language, see
-[Settings](#settings).
+![Everything in one minute](docs/overview-en.gif)
 
-![Drawing](docs/drawing.gif)
+Everything in one minute. The same as a video: [overview-en.mp4](docs/overview-en.mp4)
+(AV1, recorded by the extension itself, 740 KB). The demos for each part below show the
+interface in Russian; it follows the system language, see [Settings](#settings).
 
 ## Drawing
+
+![Drawing](docs/drawing.gif)
 
 - Pen, line, arrow, rectangle, ellipse, highlighter, text, pixelate and numbers.
 - Ten colours. Width is set with a slider or the mouse wheel, and every tool keeps its
