@@ -80,10 +80,12 @@ export class ScreenshotPlus {
                 setLanguage(settings.get_string('language'));
                 this._annotator.relabel();
                 this._codecTooltip.text = t('codec.tooltip');
+                this._micTooltip.text = t('mic.tooltip');
                 // Its title is fixed when made, so the next one is made anew.
                 destroyNotificationSource();
             }),
             settings.connect('changed::video-codec', () => this._syncCodecButton()),
+            settings.connect('changed::record-microphone', () => this._syncCodecButton()),
         ];
     }
 
@@ -150,18 +152,55 @@ export class ScreenshotPlus {
         });
         ui.add_child(this._codecTooltip);
 
+        // The microphone, a toggle next to the native pointer one, styled like it.
+        const mic = new St.Button({
+            style_class: 'screenshot-ui-show-pointer-button',
+            child: new St.Icon({icon_name: 'audio-input-microphone-symbolic'}),
+            toggle_mode: true,
+            can_focus: false,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        mic.connect('notify::checked', () => {
+            if (mic.checked !== this._settings.get_boolean('record-microphone'))
+                this._settings.set_boolean('record-microphone', mic.checked);
+        });
+        ui._showPointerButtonContainer.insert_child_at_index(mic, 1);
+        // The bottom row overlaps its parts instead of widening the panel, so
+        // with two more buttons the panel has to be made wider by hand.
+        ui._panel.add_style_class_name('splus-panel');
+        this._micTooltip = new Tooltip(mic, {
+            text: t('mic.tooltip'),
+            style_class: 'screenshot-ui-tooltip',
+            visible: false,
+        });
+        ui.add_child(this._micTooltip);
+        this._micButton = mic;
+
+        const syncAll = () => {
+            sync();
+            mic.checked = this._settings.get_boolean('record-microphone');
+            mic.visible = ui._castButton.checked;
+        };
+        this._syncCodecButton = syncAll;
+
         this._codecButton = button;
-        this._codecSignal = [ui._castButton, ui._castButton.connect('notify::checked', sync)];
-        sync();
+        this._codecSignal = [ui._castButton, ui._castButton.connect('notify::checked', syncAll)];
+        syncAll();
     }
 
     _destroyCodecButton() {
         const [object, id] = this._codecSignal;
         object.disconnect(id);
-        this._codecTooltip.close(); // Cancels its pending show timeout.
-        this._codecTooltip.destroy();
+        for (const tooltip of [this._codecTooltip, this._micTooltip]) {
+            tooltip.close(); // Cancels its pending show timeout.
+            tooltip.destroy();
+        }
+        Main.screenshotUI._panel.remove_style_class_name('splus-panel');
         this._codecButton.destroy();
+        this._micButton.destroy();
         this._codecButton = null;
+        this._micButton = null;
         this._codecTooltip = null;
+        this._micTooltip = null;
     }
 }

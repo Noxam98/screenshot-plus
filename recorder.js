@@ -60,8 +60,26 @@ const CAPS_POLL_MS = 20;
 const CAPS_TIMEOUT_MS = 2000;
 const START_TIMEOUT_SECONDS = 3;
 
-const MP4_TAIL =
-    'mp4mux fragment-duration=500 fragment-mode=first-moov-then-finalise';
+const MP4_MUX =
+    'mp4mux name=mux fragment-duration=500 fragment-mode=first-moov-then-finalise';
+
+// Voice from the default microphone: mono AAC, which every player handles.
+const AUDIO_BITRATE = 96000;
+
+function microphoneBranch() {
+    const encoder = Gst.ElementFactory.find('fdkaacenc')
+        ? `fdkaacenc rate-control=cbr bitrate=${AUDIO_BITRATE}`
+        : `avenc_aac bitrate=${AUDIO_BITRATE}`;
+    return `pulsesrc client-name="Screenshot Plus" !
+        queue !
+        audioconvert !
+        audioresample !
+        audio/x-raw,channels=1,rate=48000 !
+        ${encoder} !
+        aacparse !
+        queue !
+        mux.`;
+}
 
 // Measured on Hawk Point's VCN 4: any other size gains black padding that
 // cannot be cropped afterwards (1920x1080 comes out as 1920x1082).
@@ -73,7 +91,37 @@ export function amdFitsExactly(width, height) {
 // The first pipeline that starts wins. Only the AMD one avoids copying frames
 // through system memory, because GNOME composites on the AMD GPU. An empty list
 // (very small areas, which NVENC rejects) sends the shell to GNOME's recorder.
-export function candidates(width, height) {
+// Each pipeline is the video part only, up to the parser.
+export function candidates(width, height, codec = 'av1') {
+    // Odd sizes would otherwise be padded by one pixel.
+    const crop = width % 2 || height % 2
+        ? `videocrop right=${width % 2} bottom=${height % 2} !` : '';
+
+    // H.264 is only ours when there is sound to record; GNOME's recorder has
+    // none. The AMD driver here has no H.264 encoder, so NVENC, then the CPU.
+    // The CPU one must not look ahead: on a still screen frames come once a
+    // second, and it would hold back its first output for half a minute.
+    if (codec === 'h264') {
+        return [{
+            id: 'nvenc-h264',
+            pipeline: `capsfilter caps=video/x-raw,max-framerate=${FRAMERATE}/1 !
+                ${crop}
+                queue !
+                nvh264enc preset=p4 tune=high-quality rc-mode=vbr bitrate=0 const-quality=25 !
+                h264parse`,
+        }, {
+            id: 'x264',
+            pipeline: `capsfilter caps=video/x-raw,max-framerate=${FRAMERATE}/1 !
+                ${crop}
+                queue !
+                videoconvert !
+                video/x-raw,format=I420 !
+                x264enc speed-preset=veryfast tune=zerolatency pass=quant quantizer=23 key-int-max=60 !
+                video/x-h264,profile=high !
+                h264parse`,
+        }];
+    }
+
     const list = [];
 
     if (amdFitsExactly(width, height)) {
@@ -84,14 +132,9 @@ export function candidates(width, height) {
                 vapostproc !
                 vaav1enc target-usage=1 rate-control=cqp qp=118 !
                 queue !
-                av1parse !
-                ${MP4_TAIL}`,
+                av1parse`,
         });
     }
-
-    // Odd sizes would otherwise be padded by one pixel.
-    const crop = width % 2 || height % 2
-        ? `videocrop right=${width % 2} bottom=${height % 2} !` : '';
 
     if (Math.min(width, height) >= 200) {
         list.push({
@@ -100,8 +143,7 @@ export function candidates(width, height) {
                 ${crop}
                 queue !
                 nvav1enc preset=p4 tune=high-quality rc-mode=vbr bitrate=0 const-quality=30 !
-                av1parse !
-                ${MP4_TAIL}`,
+                av1parse`,
         });
     }
 
@@ -130,13 +172,18 @@ class Recorder {
 
         const {x, y, width, height, scale} = request;
         this._expected = [Math.round(width * scale), Math.round(height * scale)];
-        this._queue = candidates(...this._expected);
+        // With the microphone first, then the same without it: a missing or
+        // refused microphone must not cost the recording.
+        const video = candidates(...this._expected, request.codec ?? 'av1');
+        const withSound = request.microphone
+            ? video.map(c => ({...c, id: `${c.id}+mic`, microphone: true})) : [];
+        this._queue = [...withSound, ...video];
         this._area = [x, y, width, height];
     }
 
     start() {
         if (this._queue.length === 0)
-            throw new Error('area too small for the AV1 encoders');
+            throw new Error('area too small for the encoders');
 
         const parent = GLib.path_get_dirname(this._request.path);
         GLib.mkdir_with_parents(parent, 0o755);
@@ -201,6 +248,10 @@ class Recorder {
         const description = `pipewiresrc name=src path=${this._nodeId}
                 do-timestamp=true keepalive-time=1000 resend-last=true !
             ${this._current.pipeline} !
+            queue !
+            mux.
+            ${this._current.microphone ? microphoneBranch() : ''}
+            ${MP4_MUX} !
             filesink location="${this._request.path}"`;
 
         try {

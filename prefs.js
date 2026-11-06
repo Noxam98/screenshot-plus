@@ -1,6 +1,7 @@
 // Preferences window: language, screenshot sound and recording codec.
 
 import Adw from 'gi://Adw';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 
@@ -75,6 +76,12 @@ export default class ScreenshotPlusPreferences extends ExtensionPreferences {
         const codec = choiceRow(settings, 'video-codec', t('prefs.codec'), CODECS, ['AV1', 'H.264']);
         codec.subtitle = `${t('prefs.codecAv1')}\n${t('prefs.codecH264')}`;
         recording.add(codec);
+        const microphone = new Adw.SwitchRow({
+            title: t('prefs.microphone'),
+            subtitle: t('prefs.microphoneHint'),
+        });
+        settings.bind('record-microphone', microphone, 'active', Gio.SettingsBindFlags.DEFAULT);
+        recording.add(microphone);
         page.add(recording);
 
         return page;

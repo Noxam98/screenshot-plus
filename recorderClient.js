@@ -7,6 +7,10 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Mtk from 'gi://Mtk';
 
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
+import {t} from './i18n.js';
+
 const SCREENCAST_PHASE_RECORDING = 'RECORDING';
 const SPAWN_TIMEOUT_SECONDS = 10;
 // Longer than the recorder's own 10 s flush limit, so that one normally wins.
@@ -177,6 +181,7 @@ class RecorderProcess {
     _onLine(line) {
         if (line.startsWith('started ') && this.starting) {
             const [, id, ...rest] = line.split(' ');
+            this.id = id;
             this.path = rest.join(' ');
             this.starting = false;
             if (!this.stopRequested)
@@ -280,7 +285,10 @@ export class RecorderClient {
         const native = () => this._native.area.call(
             this._ui._screencastProxy, x, y, width, height, template, options);
 
-        if (this._settings.get_string('video-codec') !== 'av1')
+        // GNOME's recorder has no sound, so H.264 with the microphone is ours too.
+        const codec = this._settings.get_string('video-codec') === 'av1' ? 'av1' : 'h264';
+        const microphone = this._settings.get_boolean('record-microphone');
+        if (codec === 'h264' && !microphone)
             return native();
 
         const process = new RecorderProcess(this._script, {
@@ -291,6 +299,8 @@ export class RecorderClient {
             scale: scaleForArea(x, y, width, height),
             drawCursor: options['draw-cursor']?.deepUnpack() ?? true,
             path: expandTemplate(template),
+            codec,
+            microphone,
         }, {
             onEnded: () => {
                 const wasCurrent = this._current === process;
@@ -309,7 +319,10 @@ export class RecorderClient {
         this._current = process;
 
         try {
-            return [true, await process.start()];
+            const path = await process.start();
+            if (microphone && !process.id.endsWith('+mic'))
+                Main.notify(t('mic.withoutSound'), '');
+            return [true, path];
         } catch (e) {
             if (this._current === process)
                 this._current = null;
@@ -320,6 +333,8 @@ export class RecorderClient {
                     'stopped while starting');
             }
             console.warn(`screenshot-plus: falling back to GNOME's recorder: ${e.message}`);
+            if (microphone)
+                Main.notify(t('mic.withoutSound'), '');
             return native();
         }
     }
