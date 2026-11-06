@@ -123,9 +123,25 @@
   box-shadow: 0 0 0 2px #3584e4;
 }
 
+.splus-width {
+  spacing: 6px;
+  padding: 0 4px;
+}
+
 .splus-width-bin {
-  width: 28px;
+  width: 24px;
   height: 28px;
+}
+
+.splus-width-slider {
+  width: 110px;
+}
+
+.splus-width-value {
+  min-width: 18px;
+  color: #eeeeec;
+  font-size: 12px;
+  font-feature-settings: "tnum";
 }
 
 .splus-codec {

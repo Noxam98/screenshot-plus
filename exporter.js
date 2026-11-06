@@ -19,6 +19,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
+import {t} from './i18n.js';
 import {drawShape} from './shapes.js';
 
 // Reuse GNOME's translations so names and text stay exactly what they are today,
@@ -234,7 +235,7 @@ let notificationSource = null;
 function getSource() {
     if (!notificationSource) {
         notificationSource = new MessageTray.Source({
-            title: _('Screen Capture'),
+            title: t('notify.source'),
             iconName: 'screenshooter-symbolic',
         });
         notificationSource.connect('destroy', () => {
@@ -258,9 +259,9 @@ function notify(pixbuf, file, copied, time) {
 
     const notification = new MessageTray.Notification({
         source: getSource(),
-        title: _('Screenshot captured'),
+        title: t('notify.title'),
         body: copied
-            ? _('You can paste the image from the clipboard')
+            ? t('notify.paste')
             : file.get_basename(),
         datetime: time,
         gicon: content,
@@ -268,7 +269,7 @@ function notify(pixbuf, file, copied, time) {
     });
 
     if (file) {
-        notification.addAction(_('Show in Files'), () => {
+        notification.addAction(t('notify.showInFiles'), () => {
             const app = Gio.app_info_get_default_for_type('inode/directory', false);
             app?.launch([file], global.create_app_launch_context(0, -1));
         });
@@ -343,7 +344,7 @@ export async function finishExport(ui, job, {copy, save, rescue = false}) {
     if (saveError) {
         logError(saveError, 'screenshot-plus: save failed');
         Main.notifyError(
-            'Снимок не удалось сохранить, он в буфере обмена',
+            t('error.saveClipboard'),
             saveError.message);
     } else if (file || copy) {
         notify(result.pixbuf, file, copy, time);

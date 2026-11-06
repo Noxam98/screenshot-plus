@@ -13,6 +13,7 @@ import {ScreenshotUI, Tooltip} from 'resource:///org/gnome/shell/ui/screenshot.j
 
 import {Annotator} from './annotator.js';
 import {destroyNotificationSource} from './exporter.js';
+import {setLanguage, t} from './i18n.js';
 import {RecorderClient} from './recorderClient.js';
 
 const CODEC_LABELS = {av1: 'AV1', h264: 'H.264'};
@@ -25,8 +26,10 @@ export class ScreenshotPlus {
 
     enable() {
         const ui = Main.screenshotUI;
+        const settings = this._settings;
+        setLanguage(settings.get_string('language'));
 
-        this._annotator = new Annotator(ui, this._settings, this.path);
+        this._annotator = new Annotator(ui, settings, this.path);
         this._annotator.enable();
 
         const annotator = this._annotator;
@@ -52,24 +55,60 @@ export class ScreenshotPlus {
                 original.call(this, phase, error);
             });
 
-        // GNOME's shutter is loud and almost a second long. Every screenshot,
-        // including GNOME's own shortcuts, gets a short soft click instead. Event
-        // sounds turned off in Settings still silence it.
+        // GNOME's shutter is loud and almost a second long. By default every
+        // screenshot, including GNOME's own shortcuts, gets a short soft click
+        // instead. Event sounds turned off in Settings still silence it.
         const click = Gio.File.new_for_path(
             GLib.build_filenamev([this.path, 'sounds', 'screenshot.wav']));
         this._injections.overrideMethod(Meta.SoundPlayer.prototype, 'play_from_theme',
             original => function (name, description, cancellable) {
-                if (name === 'screen-capture' && click.query_exists(null))
+                if (name !== 'screen-capture')
+                    return original.call(this, name, description, cancellable);
+                const sound = settings.get_string('screenshot-sound');
+                if (sound === 'none')
+                    return undefined;
+                if (sound === 'soft' && click.query_exists(null))
                     return this.play_from_file(click, description, cancellable);
                 return original.call(this, name, description, cancellable);
             });
 
         this._buildCodecButton(ui);
+        this._announcePrefs();
+
+        this._settingsSignals = [
+            settings.connect('changed::language', () => {
+                setLanguage(settings.get_string('language'));
+                this._annotator.relabel();
+                this._codecTooltip.text = t('codec.tooltip');
+                // Its title is fixed when made, so the next one is made anew.
+                destroyNotificationSource();
+            }),
+            settings.connect('changed::video-codec', () => this._syncCodecButton()),
+        ];
+    }
+
+    // GNOME checks for prefs.js once per session. When reload.sh brings in a
+    // version that has one, the settings button would otherwise wait for the
+    // next login.
+    _announcePrefs() {
+        const manager = Main.extensionManager;
+        const extension = manager.getUuids().map(uuid => manager.lookup(uuid))
+            .find(e => e?.path === this.path);
+        if (!extension || extension.hasPrefs)
+            return;
+        if (!Gio.File.new_for_path(GLib.build_filenamev([this.path, 'prefs.js'])).query_exists(null))
+            return;
+        extension.hasPrefs = true;
+        manager.emit('extension-state-changed', extension);
     }
 
     disable() {
         // Runs on logout and when turned off. It stays enabled on the lock screen
         // (see session-modes), so locking does not interrupt a recording.
+        for (const id of this._settingsSignals)
+            this._settings.disconnect(id);
+        this._settingsSignals = [];
+
         this._recorder.disable();
         this._recorder = null;
 
@@ -97,15 +136,15 @@ export class ScreenshotPlus {
             button.label = CODEC_LABELS[this._settings.get_string('video-codec')] ?? 'AV1';
             button.visible = ui._castButton.checked;
         };
+        this._syncCodecButton = sync;
         button.connect('clicked', () => {
             const next = this._settings.get_string('video-codec') === 'av1' ? 'h264' : 'av1';
             this._settings.set_string('video-codec', next);
-            sync();
         });
         ui._showPointerButtonContainer.insert_child_at_index(button, 0);
 
         this._codecTooltip = new Tooltip(button, {
-            text: 'Кодек записи: AV1 или H.264 для совместимости',
+            text: t('codec.tooltip'),
             style_class: 'screenshot-ui-tooltip',
             visible: false,
         });

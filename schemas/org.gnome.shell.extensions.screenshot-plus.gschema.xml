@@ -1,6 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.screenshot-plus" path="/org/gnome/shell/extensions/screenshot-plus/">
+    <key name="language" type="s">
+      <default>'system'</default>
+      <summary>Interface language: a code such as 'en' or 'ru', or 'system'</summary>
+    </key>
+    <key name="screenshot-sound" type="s">
+      <choices>
+        <choice value="soft"/>
+        <choice value="gnome"/>
+        <choice value="none"/>
+      </choices>
+      <default>'soft'</default>
+      <summary>Screenshot sound: a soft click, GNOME's shutter, or none</summary>
+    </key>
     <key name="video-codec" type="s">
       <default>'av1'</default>
       <summary>Codec for screen recordings: av1 or h264 (GNOME's own recorder)</summary>
@@ -13,10 +26,9 @@
       <default>'#e01b24'</default>
       <summary>Last used drawing colour</summary>
     </key>
-    <key name="tool-width" type="i">
-      <default>4</default>
-      <range min="1" max="30"/>
-      <summary>Last used line width</summary>
+    <key name="tool-widths" type="a{si}">
+      <default>{}</default>
+      <summary>Last used width per drawing tool, by tool id</summary>
     </key>
   </schema>
 </schemalist>

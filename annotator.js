@@ -14,8 +14,10 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Tooltip} from 'resource:///org/gnome/shell/ui/screenshot.js';
+import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
 import {beginExport, captureBase, finishExport} from './exporter.js';
+import {t} from './i18n.js';
 import {
     MAX_FONT,
     MAX_RADIUS,
@@ -33,6 +35,7 @@ import {
     parseColor,
     resizeShape,
     resizeTextAroundCenter,
+    rotateAround,
     shapeBounds,
     shapeBox,
     textCenter,
@@ -41,19 +44,19 @@ import {
     textFont,
 } from './shapes.js';
 
-const SELECT_TOOL = {id: 'select', icon: 'select', label: 'Выбор и изменение (0)'};
+const SELECT_TOOL = {id: 'select', icon: 'select', label: 'tool.select'};
 
 // Order matches the digit keys 1 to 9.
 const DRAW_TOOLS = [
-    {id: 'pen', icon: 'pen', label: 'Карандаш (1)'},
-    {id: 'line', icon: 'line', label: 'Линия (2)'},
-    {id: 'arrow', icon: 'arrow', label: 'Стрелка (3)'},
-    {id: 'rect', icon: 'rect', label: 'Прямоугольник (4)'},
-    {id: 'ellipse', icon: 'ellipse', label: 'Эллипс (5)'},
-    {id: 'marker', icon: 'marker', label: 'Маркер (6)'},
-    {id: 'text', icon: 'text', label: 'Текст (7)'},
-    {id: 'pixelate', icon: 'pixelate', label: 'Скрыть пикселями (8)'},
-    {id: 'counter', icon: 'counter', label: 'Цифра, протянуть — со стрелкой (9)'},
+    {id: 'pen', icon: 'pen', label: 'tool.pen'},
+    {id: 'line', icon: 'line', label: 'tool.line'},
+    {id: 'arrow', icon: 'arrow', label: 'tool.arrow'},
+    {id: 'rect', icon: 'rect', label: 'tool.rect'},
+    {id: 'ellipse', icon: 'ellipse', label: 'tool.ellipse'},
+    {id: 'marker', icon: 'marker', label: 'tool.marker'},
+    {id: 'text', icon: 'text', label: 'tool.text'},
+    {id: 'pixelate', icon: 'pixelate', label: 'tool.pixelate'},
+    {id: 'counter', icon: 'counter', label: 'tool.counter'},
 ];
 
 const COLORS = [
@@ -87,6 +90,23 @@ const DOUBLE_CLICK_MS = 400;
 const DOUBLE_CLICK_PX = 6;
 const UNDO_LIMIT = 200;
 const SCROLL_UNDO_GAP_US = 800000;
+
+// Every tool remembers its own width. Text has its own size instead.
+const DEFAULT_WIDTHS = {
+    pen: 3,
+    line: 4,
+    arrow: 4,
+    rect: 4,
+    ellipse: 4,
+    marker: 4,
+    pixelate: 4,
+    counter: 4,
+};
+const WIDTH_SAVE_DELAY_MS = 500;
+
+// Thin lines get most of the slider, since that is where most drawing happens.
+const sliderOf = width => Math.sqrt((width - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH));
+const widthOf = value => MIN_WIDTH + value * value * (MAX_WIDTH - MIN_WIDTH);
 
 // Physical key codes (evdev + 8), so shortcuts work on the Russian layout too.
 const KEYCODE = {C: 54, S: 39, V: 55, Y: 29, Z: 52};
@@ -144,6 +164,7 @@ export class Annotator {
         this._selected = null;
         this._transform = null;
         this._textActor = null;
+        this._textHolder = null;
         this._textEdit = null;
         this._tool = null;
         this._slot = 'text';
@@ -161,7 +182,14 @@ export class Annotator {
         this._lastClick = null;
 
         this._color = settings.get_string('tool-color');
-        this._width = settings.get_int('tool-width');
+        this._widths = {...DEFAULT_WIDTHS};
+        for (const [tool, width] of Object.entries(settings.get_value('tool-widths').deepUnpack())) {
+            if (tool in DEFAULT_WIDTHS)
+                this._widths[tool] = clamp(width, MIN_WIDTH, MAX_WIDTH);
+        }
+        this._saveWidthsId = 0;
+        this._syncingWidth = false;
+        this._translations = [];
         this._textStyle = this._loadTextStyle();
     }
 
@@ -217,6 +245,12 @@ export class Annotator {
             this._laterId = 0;
         }
 
+        if (this._saveWidthsId) {
+            GLib.source_remove(this._saveWidthsId);
+            this._saveWidthsId = 0;
+            this._saveWidths();
+        }
+
         for (const [object, id] of this._signals)
             object.disconnect(id);
         this._signals = [];
@@ -225,6 +259,7 @@ export class Annotator {
         this._dropBase();
         this._catcher.destroy();
         this._drawing.destroy();
+        this._hint.destroy();
         this._toolbar.destroy();
         for (const tooltip of this._tooltips) {
             tooltip.close(); // Cancels its pending show timeout.
@@ -308,8 +343,9 @@ export class Annotator {
 
         // Says so next to the pointer wherever a press would change the
         // selection instead of drawing.
+        // On top of everything, the toolbar included, which often sits right
+        // under a corner of the selection.
         this._hint = new St.Label({style_class: 'splus-cursor-hint', visible: false});
-        this._catcher.add_child(this._hint);
         this._catcher.connect('leave-event', () => {
             this._hint.hide();
             return Clutter.EVENT_PROPAGATE;
@@ -329,6 +365,7 @@ export class Annotator {
 
         this._ui.add_child(this._catcher);
         this._ui.insert_child_below(this._drawing, this._ui._areaSelector);
+        this._ui.add_child(this._hint);
     }
 
     _icon(name) {
@@ -339,11 +376,26 @@ export class Annotator {
         });
     }
 
-    _addTooltip(widget, text) {
+    // Sets a text now and again whenever the language changes.
+    _translate(apply) {
+        apply();
+        this._translations.push(apply);
+    }
+
+    // The language was changed in the preferences.
+    relabel() {
+        for (const apply of this._translations)
+            apply();
+        this._schedulePlacement();
+    }
+
+    _addTooltip(widget, key) {
         const tooltip = new Tooltip(widget, {
-            text,
             style_class: 'screenshot-ui-tooltip',
             visible: false,
+        });
+        this._translate(() => {
+            tooltip.text = t(key);
         });
         this._ui.add_child(tooltip);
         this._tooltips.push(tooltip);
@@ -389,6 +441,138 @@ export class Annotator {
         this._syncTextRow();
     }
 
+    // A preview dot, GNOME's own slider and the number.
+    _buildWidthControl() {
+        this._widthGroup = new St.BoxLayout({
+            style_class: 'splus-width',
+            reactive: true,
+            track_hover: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+
+        const dotBin = new St.Widget({
+            style_class: 'splus-width-bin',
+            layout_manager: new Clutter.BinLayout(),
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._widthDot = new St.Widget({
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        dotBin.add_child(this._widthDot);
+        this._widthGroup.add_child(dotBin);
+
+        this._widthSlider = new Slider(0);
+        this._widthSlider.add_style_class_name('splus-width-slider');
+        this._widthSlider.can_focus = false;
+        this._widthSlider.x_expand = false;
+        this._widthSlider.y_align = Clutter.ActorAlign.CENTER;
+        this._widthSlider.connect('notify::value', () => {
+            if (!this._syncingWidth)
+                this._setWidth(widthOf(this._widthSlider.value));
+        });
+        // The slider's own wheel step is a fraction of a pixel. This is one.
+        this._widthSlider.connect('scroll-event', (_a, e) => {
+            this._onScroll(e);
+            return Clutter.EVENT_STOP;
+        });
+        this._widthGroup.add_child(this._widthSlider);
+
+        this._widthLabel = new St.Label({
+            style_class: 'splus-width-value',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._widthGroup.add_child(this._widthLabel);
+
+        this._addTooltip(this._widthGroup, 'width');
+        return this._widthGroup;
+    }
+
+    // The selected shape, or else the tool about to draw. Text has its own size.
+    _widthTarget() {
+        const shape = this._selected;
+        if (shape && shape.type !== 'text')
+            return {shape, type: shape.type};
+        if (this._tool in DEFAULT_WIDTHS)
+            return {shape: null, type: this._tool};
+        return null;
+    }
+
+    _widthOfTarget({shape, type}) {
+        if (!shape)
+            return this._widths[type];
+        // A number's size follows from its circle, which handles can also scale.
+        return type === 'counter' ? (shape.radius - counterRadius(0)) / 2 : shape.width;
+    }
+
+    _setWidth(value) {
+        const target = this._widthTarget();
+        if (!target)
+            return;
+        const width = clamp(Math.round(value), MIN_WIDTH, MAX_WIDTH);
+        const {shape, type} = target;
+
+        if (shape) {
+            this._scrollUndo();
+            if (type === 'counter')
+                shape.radius = counterRadius(width);
+            else
+                shape.width = width;
+            this._refreshCommitted();
+            this._updateOverlay();
+        }
+
+        this._widths[type] = width;
+        this._saveWidthsLater();
+
+        if (this._current?.type === type) {
+            if (type === 'counter')
+                this._current.radius = counterRadius(width);
+            else
+                this._current.width = width;
+            this._updateLive();
+        }
+        this._syncWidth();
+    }
+
+    _syncWidth() {
+        const target = this._widthTarget();
+        this._widthSlider.reactive = target !== null;
+        this._widthGroup.opacity = target ? 255 : 90;
+        if (!target) {
+            this._widthLabel.text = '';
+            this._widthDot.set_style('width: 0; height: 0;');
+            return;
+        }
+
+        const width = clamp(Math.round(this._widthOfTarget(target)), MIN_WIDTH, MAX_WIDTH);
+        this._syncingWidth = true;
+        this._widthSlider.value = sliderOf(width);
+        this._syncingWidth = false;
+        this._widthLabel.text = String(width);
+
+        const color = target.shape?.color ?? this._color;
+        const size = Math.min(22, 3 + width);
+        this._widthDot.set_style(
+            `background-color: ${color}; width: ${size}px; height: ${size}px; ` +
+            `border-radius: ${size / 2}px; border: 1px solid rgba(255,255,255,0.5);`);
+    }
+
+    // Writing on every pixel of a slider drag would be pointless disk traffic.
+    _saveWidthsLater() {
+        if (this._saveWidthsId)
+            return;
+        this._saveWidthsId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, WIDTH_SAVE_DELAY_MS, () => {
+            this._saveWidthsId = 0;
+            this._saveWidths();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _saveWidths() {
+        this._settings.set_value('tool-widths', new GLib.Variant('a{si}', this._widths));
+    }
+
     _buildMainRow() {
         this._toolGroup = new St.BoxLayout({style_class: 'splus-group'});
         this._toolButtons = new Map();
@@ -416,50 +600,41 @@ export class Annotator {
             this._colorGroup.add_child(button);
         }
 
-        // Shows the current size, and is the visible hint that scrolling does it.
-        this._widthBin = new St.Widget({
-            style_class: 'splus-width-bin',
-            layout_manager: new Clutter.BinLayout(),
-            reactive: true,
-            track_hover: true,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._widthDot = new St.Widget({
-            x_align: Clutter.ActorAlign.CENTER,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._widthBin.add_child(this._widthDot);
-        this._addTooltip(this._widthBin, 'Толщина: колесо мыши');
-        this._colorGroup.add_child(this._widthBin);
+        this._colorGroup.add_child(this._separator());
+        this._colorGroup.add_child(this._buildWidthControl());
         this._colorGroup.add_child(this._separator());
         this._mainRow.add_child(this._colorGroup);
 
         this._undoGroup = new St.BoxLayout({style_class: 'splus-group'});
-        this._undoButton = this._toolButton('undo', 'Отменить (Ctrl+Z)', () => this._undo());
-        this._redoButton = this._toolButton('redo', 'Вернуть (Ctrl+Shift+Z)', () => this._redo());
+        this._undoButton = this._toolButton('undo', 'undo', () => this._undo());
+        this._redoButton = this._toolButton('redo', 'redo', () => this._redo());
         this._undoGroup.add_child(this._undoButton);
         this._undoGroup.add_child(this._redoButton);
         this._undoGroup.add_child(this._separator());
         this._mainRow.add_child(this._undoGroup);
 
-        this._copyButton = this._toolButton('copy', 'Копировать (Ctrl+C)', () => {
+        this._copyButton = this._toolButton('copy', 'copy', () => {
             this._exportAndClose({copy: true, save: false});
         }, 'splus-tool splus-action');
-        this._saveButton = this._toolButton('save', 'Сохранить (Ctrl+S)', () => {
+        this._saveButton = this._toolButton('save', 'save', () => {
             this._exportAndClose({copy: false, save: true});
         }, 'splus-tool splus-action');
         this._mainRow.add_child(this._copyButton);
         this._mainRow.add_child(this._saveButton);
-        this._mainRow.add_child(this._toolButton('close', 'Закрыть (Esc)', () => {
+        this._mainRow.add_child(this._toolButton('close', 'close', () => {
             this._ui.close();
         }));
     }
 
-    _slotButton(slot, label) {
+    _slotButton(slot, key) {
         const swatch = new St.Widget({style_class: 'splus-swatch', y_align: Clutter.ActorAlign.CENTER});
         const box = new St.BoxLayout({style_class: 'splus-slot-box'});
         box.add_child(swatch);
-        box.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+        const label = new St.Label({y_align: Clutter.ActorAlign.CENTER});
+        this._translate(() => {
+            label.text = t(key);
+        });
+        box.add_child(label);
         const button = new St.Button({style_class: 'splus-slot', child: box, can_focus: false});
         button.connect('clicked', () => {
             this._slot = slot;
@@ -469,13 +644,16 @@ export class Annotator {
         return {button, swatch};
     }
 
-    _stepper(title, onStep) {
+    _stepper(key, onStep) {
         const box = new St.BoxLayout({style_class: 'splus-stepper'});
-        box.add_child(new St.Label({
-            text: title,
+        const title = new St.Label({
             style_class: 'splus-step-title',
             y_align: Clutter.ActorAlign.CENTER,
-        }));
+        });
+        this._translate(() => {
+            title.text = t(key);
+        });
+        box.add_child(title);
         const step = (text, delta) => {
             const button = new St.Button({
                 label: text,
@@ -498,9 +676,9 @@ export class Annotator {
 
     _buildTextRow() {
         this._slots = {
-            text: this._slotButton('text', 'Текст'),
-            outline: this._slotButton('outline', 'Обводка'),
-            bg: this._slotButton('bg', 'Фон'),
+            text: this._slotButton('text', 'text.color'),
+            outline: this._slotButton('outline', 'text.outline'),
+            bg: this._slotButton('bg', 'text.background'),
         };
         for (const {button} of Object.values(this._slots))
             this._textRow.add_child(button);
@@ -508,9 +686,11 @@ export class Annotator {
         // Only outline and background can be absent, and it is the palette's
         // natural extra entry for those two.
         this._noneButton = new St.Button({
-            label: 'Нет',
             style_class: 'splus-slot',
             can_focus: false,
+        });
+        this._translate(() => {
+            this._noneButton.label = t('text.none');
         });
         this._noneButton.connect('clicked', () => {
             this._applyStyle(this._slot === 'outline' ? {outlineColor: null} : {bgColor: null});
@@ -518,19 +698,19 @@ export class Annotator {
         this._textRow.add_child(this._noneButton);
         this._textRow.add_child(this._separator());
 
-        this._sizeStepper = this._stepper('Размер', delta => {
+        this._sizeStepper = this._stepper('text.size', delta => {
             const {fontPx} = this._readStyle();
             this._applyStyle({fontPx: clamp(Math.round(fontPx) + delta * 2, MIN_FONT, MAX_FONT)});
         });
         this._textRow.add_child(this._sizeStepper.box);
 
-        this._outlineStepper = this._stepper('Обводка', delta => {
+        this._outlineStepper = this._stepper('text.outlineWidth', delta => {
             const {outlineWidth} = this._readStyle();
             this._applyStyle({outlineWidth: clamp(outlineWidth + delta, 1, 20)});
         });
         this._textRow.add_child(this._outlineStepper.box);
 
-        this._alphaStepper = this._stepper('Плотность фона', delta => {
+        this._alphaStepper = this._stepper('text.bgOpacity', delta => {
             const {bgAlpha} = this._readStyle();
             this._applyStyle({bgAlpha: clamp(Math.round((bgAlpha + delta * 0.1) * 10) / 10, 0.1, 1)});
         });
@@ -544,8 +724,8 @@ export class Annotator {
             this._textRow.add_child(stepper.box);
             return stepper;
         };
-        this._bgHeightStepper = padding('Высота фона', 'bgPadY');
-        this._bgWidthStepper = padding('Ширина фона', 'bgPadX');
+        this._bgHeightStepper = padding('text.bgHeight', 'bgPadY');
+        this._bgWidthStepper = padding('text.bgWidth', 'bgPadX');
     }
 
     // Order: selection and monitor actors < drawing < native panel < toolbar.
@@ -554,6 +734,7 @@ export class Annotator {
         ui.set_child_below_sibling(this._catcher, ui._primaryMonitorBin);
         ui.set_child_below_sibling(this._drawing, ui._areaSelector);
         ui.set_child_above_sibling(this._toolbar, null);
+        ui.set_child_above_sibling(this._hint, null);
     }
 
     // ---- state ----
@@ -714,6 +895,7 @@ export class Annotator {
             this._ensureBase();
 
         this._syncTextRow();
+        this._syncWidth();
         this._schedulePlacement();
     }
 
@@ -737,9 +919,8 @@ export class Annotator {
 
     _applyStyle(changes) {
         if (this._textActor) {
-            Object.assign(this._current, changes);
+            this._changeEditedText(() => Object.assign(this._current, changes));
             this._textActor.set_font_name(textFont(this._current.fontPx));
-            this._updateLive();
         } else if (this._selected?.type === 'text') {
             this._pushUndo();
             const {fontPx, ...others} = changes;
@@ -805,11 +986,7 @@ export class Annotator {
         for (const [color, button] of this._colorButtons)
             button.checked = color === active;
 
-        const width = this._selected?.width ?? this._width;
-        const size = Math.min(22, 3 + width);
-        this._widthDot.set_style(
-            `background-color: ${this._color}; width: ${size}px; height: ${size}px; ` +
-            `border-radius: ${size / 2}px; border: 1px solid rgba(255,255,255,0.5);`);
+        this._syncWidth();
     }
 
     _syncTextRow() {
@@ -1107,7 +1284,7 @@ export class Annotator {
             return;
         }
         this._hint.text = cursor === Clutter.CursorType.CROSSHAIR
-            ? 'Новое выделение' : 'Размер выделения';
+            ? t('hint.newSelection') : t('hint.resizeSelection');
 
         // Below right of the pointer, flipped where that would leave the monitor.
         const monitor = Main.layoutManager.monitors[global.display.get_current_monitor()];
@@ -1208,7 +1385,7 @@ export class Annotator {
         }
 
         this._select(null);
-        const base = {color: this._color, width: this._width};
+        const base = {color: this._color, width: this._widths[this._tool]};
 
         switch (this._tool) {
         case 'counter': {
@@ -1217,7 +1394,7 @@ export class Annotator {
             this._current = {
                 type: 'counter',
                 color: this._color,
-                radius: counterRadius(this._width),
+                radius: counterRadius(this._widths.counter),
                 x,
                 y,
                 number,
@@ -1433,29 +1610,9 @@ export class Annotator {
             return Clutter.EVENT_STOP;
         }
 
-        const selected = this._selected;
-        if (selected) {
-            this._scrollUndo();
-            if (selected.type === 'counter')
-                selected.radius = clamp(selected.radius + delta * 2, MIN_RADIUS, MAX_RADIUS);
-            else
-                selected.width = clamp(selected.width + delta, MIN_WIDTH, MAX_WIDTH);
-            this._refreshCommitted();
-            this._updateOverlay();
-        }
-        if (!selected || selected.width) {
-            this._width = clamp(this._width + delta, MIN_WIDTH, MAX_WIDTH);
-            this._settings.set_int('tool-width', this._width);
-        }
-        this._syncColor();
-
-        if (this._current?.width) {
-            this._current.width = this._width;
-            this._updateLive();
-        } else if (this._current?.type === 'counter') {
-            this._current.radius = counterRadius(this._width);
-            this._updateLive();
-        }
+        const target = this._widthTarget();
+        if (target)
+            this._setWidth(this._widthOfTarget(target) + delta);
         return Clutter.EVENT_STOP;
     }
 
@@ -1619,19 +1776,47 @@ export class Annotator {
             selection_color: this._coglColor('#3584e4', 0.45),
             text: shape.text,
         });
-        this._textActor.set_position(shape.x, shape.y);
         this._textActor.connect('text-changed', actor => {
-            this._current.text = actor.get_text();
-            this._updateLive();
+            this._changeEditedText(() => {
+                this._current.text = actor.get_text();
+            });
         });
         // Keys the editor has no use for would bubble up to the native handler,
         // where Ctrl+V switches to recording and Ctrl+Space saves and closes.
         this._textActor.connect_after('key-press-event', () => Clutter.EVENT_STOP);
-        this._catcher.add_child(this._textActor);
+
+        // The editor turns with the text, around the same centre, so the caret and
+        // a selection made with the mouse sit right on the turned letters.
+        this._textHolder = new Clutter.Actor();
+        this._textHolder.add_child(this._textActor);
+        this._catcher.add_child(this._textHolder);
+        this._placeTextActor();
         global.stage.set_key_focus(this._textActor);
         this._overlay.hide();
         this._updateLive();
         this._syncTextRow();
+    }
+
+    // The text's start stays where it is on screen while it grows or shrinks, also
+    // when it is turned, so typing extends it along its own direction.
+    _changeEditedText(change) {
+        const shape = this._current;
+        const angle = shape.angle ?? 0;
+        const [ax, ay] = rotateAround(shape.x, shape.y, ...textCenter(shape), angle);
+        change();
+        const [bx, by] = rotateAround(shape.x, shape.y, ...textCenter(shape), angle);
+        shape.x += ax - bx;
+        shape.y += ay - by;
+        this._placeTextActor();
+        this._updateLive();
+    }
+
+    _placeTextActor() {
+        const shape = this._current;
+        const [cx, cy] = textCenter(shape);
+        this._textHolder.set_position(cx, cy);
+        this._textHolder.rotation_angle_z = (shape.angle ?? 0) * 180 / Math.PI;
+        this._textActor.set_position(shape.x - cx, shape.y - cy);
     }
 
     _pasteIntoText() {
@@ -1663,15 +1848,15 @@ export class Annotator {
         this._selected = null;
         this._refreshCommitted();
         this._textEdit = {index, original: shape};
-        // Typed straight, like in Telegram. It turns back when editing ends.
-        this._openTextActor({...shape, angle: 0});
+        this._openTextActor({...shape});
         // Caret at the end with nothing selected, so typing adds to the text.
         this._textActor.set_cursor_position(-1);
         this._textActor.set_selection_bound(-1);
     }
 
     _closeTextActor() {
-        this._textActor.destroy();
+        this._textHolder.destroy();
+        this._textHolder = null;
         this._textActor = null;
         this._current = null;
         this._lastClick = null; // Clicks in the editor must not pair with later ones.
@@ -1703,19 +1888,10 @@ export class Annotator {
     _commitText() {
         if (!this._textActor)
             return;
-        let shape = this._current;
+        const shape = this._current;
         const edit = this._textEdit;
         this._textEdit = null;
         this._closeTextActor();
-
-        if (edit?.original.angle) {
-            const [ox, oy] = textCenter(edit.original);
-            const [nx, ny] = textCenter(shape);
-            shape = {
-                ...moveShape(shape, ox - nx, oy - ny),
-                angle: edit.original.angle,
-            };
-        }
 
         const hasText = shape.text.trim().length > 0;
         if (edit) {
@@ -1753,7 +1929,7 @@ export class Annotator {
 
         return finishExport(this._ui, job, {...options, rescue: true}).catch(e => {
             logError(e, 'screenshot-plus: export failed');
-            Main.notifyError('Снимок не удалось сделать', e.message);
+            Main.notifyError(t('error.capture'), e.message);
         });
     }
 
@@ -1770,7 +1946,7 @@ export class Annotator {
             this._ui.close();
         } catch (e) {
             logError(e, 'screenshot-plus: export failed');
-            Main.notifyError('Снимок не удалось сохранить', e.message);
+            Main.notifyError(t('error.save'), e.message);
         } finally {
             this._exporting = false;
         }

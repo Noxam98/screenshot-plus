@@ -353,7 +353,7 @@ export function drawShape(cr, shape, base = null) {
     }
 }
 
-function rotateAround(x, y, cx, cy, angle) {
+export function rotateAround(x, y, cx, cy, angle) {
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     return [
