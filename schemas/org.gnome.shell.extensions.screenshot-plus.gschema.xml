@@ -30,6 +30,10 @@
       <default>''</default>
       <summary>Human-readable name of that microphone, shown in the recording panel</summary>
     </key>
+    <key name="show-clicks" type="b">
+      <default>true</default>
+      <summary>Mark clicks with a circle in recordings that show the pointer</summary>
+    </key>
     <key name="text-style" type="s">
       <default>'{}'</default>
       <summary>Last used text style as JSON: fontPx, outlineColor, outlineWidth, bgColor, bgAlpha, bgPadX, bgPadY</summary>

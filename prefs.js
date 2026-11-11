@@ -1,4 +1,4 @@
-// Preferences window: language, screenshot sound and recording codec.
+// Preferences window: language, screenshot sound and recording.
 
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
@@ -118,6 +118,12 @@ export default class ScreenshotPlusPreferences extends ExtensionPreferences {
         settings.bind('record-microphone', microphone, 'active', Gio.SettingsBindFlags.DEFAULT);
         recording.add(microphone);
         recording.add(this._microphoneRow(settings, monitor));
+        const clicks = new Adw.SwitchRow({
+            title: t('prefs.clicks'),
+            subtitle: t('prefs.clicksHint'),
+        });
+        settings.bind('show-clicks', clicks, 'active', Gio.SettingsBindFlags.DEFAULT);
+        recording.add(clicks);
         page.add(recording);
 
         return page;

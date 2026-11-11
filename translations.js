@@ -63,6 +63,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Default',
             'prefs.microphoneMissing': '{0} (not connected)',
             'mic.defaultInstead': 'The chosen microphone is not connected, recording from the default one',
+            'prefs.clicks': 'Show clicks',
+            'prefs.clicksHint': 'A circle around the pointer at each click, in recordings that show the pointer',
         },
     },
     ru: {
@@ -125,6 +127,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'По умолчанию',
             'prefs.microphoneMissing': '{0} (не подключён)',
             'mic.defaultInstead': 'Выбранный микрофон не подключён, запись идёт с микрофона по умолчанию',
+            'prefs.clicks': 'Показывать клики',
+            'prefs.clicksHint': 'Круг вокруг курсора при каждом нажатии, если курсор записывается',
         },
     },
     uk: {
@@ -187,6 +191,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Типовий',
             'prefs.microphoneMissing': '{0} (не під’єднано)',
             'mic.defaultInstead': 'Вибраний мікрофон не під’єднано, запис іде з типового мікрофона',
+            'prefs.clicks': 'Показувати кліки',
+            'prefs.clicksHint': 'Коло навколо курсора під час кожного натискання, якщо курсор записується',
         },
     },
     de: {
@@ -249,6 +255,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Standard',
             'prefs.microphoneMissing': '{0} (nicht verbunden)',
             'mic.defaultInstead': 'Das gewählte Mikrofon ist nicht verbunden, aufgenommen wird vom Standardmikrofon',
+            'prefs.clicks': 'Klicks anzeigen',
+            'prefs.clicksHint': 'Ein Kreis um den Zeiger bei jedem Klick, wenn der Zeiger mit aufgenommen wird',
         },
     },
     fr: {
@@ -311,6 +319,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Par défaut',
             'prefs.microphoneMissing': '{0} (non connecté)',
             'mic.defaultInstead': 'Le micro choisi n’est pas connecté, enregistrement avec le micro par défaut',
+            'prefs.clicks': 'Afficher les clics',
+            'prefs.clicksHint': 'Un cercle autour du pointeur à chaque clic, quand le pointeur est enregistré',
         },
     },
     es: {
@@ -373,6 +383,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Predeterminado',
             'prefs.microphoneMissing': '{0} (no conectado)',
             'mic.defaultInstead': 'El micrófono elegido no está conectado; se graba con el predeterminado',
+            'prefs.clicks': 'Mostrar clics',
+            'prefs.clicksHint': 'Un círculo alrededor del puntero en cada clic, cuando se graba el puntero',
         },
     },
     pt: {
@@ -435,6 +447,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Padrão',
             'prefs.microphoneMissing': '{0} (não conectado)',
             'mic.defaultInstead': 'O microfone escolhido não está conectado; gravando com o padrão',
+            'prefs.clicks': 'Mostrar cliques',
+            'prefs.clicksHint': 'Um círculo ao redor do ponteiro a cada clique, quando o ponteiro é gravado',
         },
     },
     it: {
@@ -497,6 +511,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Predefinito',
             'prefs.microphoneMissing': '{0} (non collegato)',
             'mic.defaultInstead': 'Il microfono scelto non è collegato, si registra con quello predefinito',
+            'prefs.clicks': 'Mostra i clic',
+            'prefs.clicksHint': 'Un cerchio attorno al puntatore a ogni clic, quando il puntatore viene registrato',
         },
     },
     pl: {
@@ -559,6 +575,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Domyślne',
             'prefs.microphoneMissing': '{0} (niepodłączone)',
             'mic.defaultInstead': 'Wybrany mikrofon nie jest podłączony, nagrywanie z domyślnego',
+            'prefs.clicks': 'Pokazuj kliknięcia',
+            'prefs.clicksHint': 'Okrąg wokół wskaźnika przy każdym kliknięciu, gdy wskaźnik jest nagrywany',
         },
     },
     nb: {
@@ -621,6 +639,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Standard',
             'prefs.microphoneMissing': '{0} (ikke tilkoblet)',
             'mic.defaultInstead': 'Den valgte mikrofonen er ikke tilkoblet, tar opp fra standardmikrofonen',
+            'prefs.clicks': 'Vis klikk',
+            'prefs.clicksHint': 'En sirkel rundt pekeren ved hvert klikk når pekeren tas opp',
         },
     },
     tr: {
@@ -683,6 +703,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Varsayılan',
             'prefs.microphoneMissing': '{0} (bağlı değil)',
             'mic.defaultInstead': 'Seçilen mikrofon bağlı değil, varsayılan mikrofondan kaydediliyor',
+            'prefs.clicks': 'Tıklamaları göster',
+            'prefs.clicksHint': 'İşaretçi kaydediliyorsa her tıklamada çevresinde bir halka',
         },
     },
     ja: {
@@ -745,6 +767,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'デフォルト',
             'prefs.microphoneMissing': '{0}（未接続）',
             'mic.defaultInstead': '選択したマイクが接続されていないため、デフォルトのマイクで録音しています',
+            'prefs.clicks': 'クリックを表示',
+            'prefs.clicksHint': 'ポインターを録画するとき、クリックごとにポインターの周りに円を表示',
         },
     },
     zh: {
@@ -807,6 +831,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': '默认',
             'prefs.microphoneMissing': '{0}（未连接）',
             'mic.defaultInstead': '所选麦克风未连接，正在使用默认麦克风录制',
+            'prefs.clicks': '显示点击',
+            'prefs.clicksHint': '录制指针时，每次点击都会在指针周围显示一个圆圈',
         },
     },
     eo: {
@@ -869,6 +895,8 @@ export const TRANSLATIONS = {
             'prefs.microphoneDefault': 'Defaŭlta',
             'prefs.microphoneMissing': '{0} (ne konektita)',
             'mic.defaultInstead': 'La elektita mikrofono ne estas konektita, registrado per la defaŭlta',
+            'prefs.clicks': 'Montri klakojn',
+            'prefs.clicksHint': 'Rondo ĉirkaŭ la montrilo ĉe ĉiu klako, kiam la montrilo estas registrata',
         },
     },
 };

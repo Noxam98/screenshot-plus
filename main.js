@@ -12,6 +12,7 @@ import {ScreencastError, ScreencastErrors} from 'resource:///org/gnome/shell/mis
 import {ScreenshotUI, Tooltip} from 'resource:///org/gnome/shell/ui/screenshot.js';
 
 import {Annotator} from './annotator.js';
+import {ClickMarks} from './clickMarks.js';
 import {destroyNotificationSource, notifyRecording, removeTempFiles} from './exporter.js';
 import {setLanguage, t} from './i18n.js';
 import {MicPicker} from './micPicker.js';
@@ -90,6 +91,7 @@ export class ScreenshotPlus {
 
         this._buildCodecButton(ui);
         this._buildRecordingFrame(ui);
+        this._clickMarks = new ClickMarks(ui, settings);
         this._announcePrefs();
 
         this._settingsSignals = [
@@ -155,6 +157,9 @@ export class ScreenshotPlus {
         for (const id of this._settingsSignals)
             this._settings.disconnect(id);
         this._settingsSignals = [];
+
+        this._clickMarks.destroy();
+        this._clickMarks = null;
 
         this._recorder.disable();
         this._recorder = null;

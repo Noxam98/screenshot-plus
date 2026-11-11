@@ -99,6 +99,7 @@ Open them from the Extensions app, or with
 - **Recording codec.** AV1 or H.264.
 - **Microphone.** Records sound from a microphone along with the screen, and which one:
   the default or any connected microphone. The list follows headsets being plugged in.
+- **Show clicks.** On by default; see [Recording](#recording).
 
 ## Recording
 
@@ -120,6 +121,12 @@ notification says so.
 
 While an area records, the rest of the screen is not dimmed as GNOME does; a thin
 red frame just outside the area marks it and never gets into the video.
+
+With "Show Pointer" on, every click gets a circle around the pointer, so viewers see
+where you clicked: yellow for the left button, blue for the right, green for the
+middle. A held button keeps its circle under the pointer, which shows drags, and
+letting go makes it spread out and fade. The circles are drawn on the screen itself,
+so you see them too. They can be turned off in the settings.
 
 When a recording ends, its notification stays in the list until dismissed: click it
 to watch the video, or "Show in Files" opens the folder with the video selected.

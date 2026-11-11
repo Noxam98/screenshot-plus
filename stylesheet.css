@@ -214,3 +214,26 @@
 .splus-recording-frame {
   border: 2px solid rgba(224, 27, 36, 0.85);
 }
+
+/* Clicks while recording with the pointer shown (clickMarks.js). The radius is
+   half of its SIZE. */
+.splus-click {
+  border-radius: 22px;
+  border-width: 3px;
+  border-style: solid;
+}
+
+.splus-click-left {
+  background-color: rgba(246, 211, 45, 0.35);
+  border-color: rgba(229, 165, 10, 0.95);
+}
+
+.splus-click-right {
+  background-color: rgba(98, 160, 234, 0.35);
+  border-color: rgba(28, 113, 216, 0.95);
+}
+
+.splus-click-middle {
+  background-color: rgba(87, 227, 137, 0.35);
+  border-color: rgba(38, 162, 105, 0.95);
+}
