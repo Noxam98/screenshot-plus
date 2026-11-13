@@ -16,7 +16,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Tooltip} from 'resource:///org/gnome/shell/ui/screenshot.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
-import {beginExport, captureBase, finishExport} from './exporter.js';
+import {beginExport, captureBase, colorAt, finishExport} from './exporter.js';
 import {t} from './i18n.js';
 import {Magnifier} from './magnifier.js';
 import {
@@ -118,7 +118,7 @@ const sliderOf = width => Math.sqrt((width - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH
 const widthOf = value => MIN_WIDTH + value * value * (MAX_WIDTH - MIN_WIDTH);
 
 // Physical key codes (evdev + 8), so shortcuts work on the Russian layout too.
-const KEYCODE = {C: 54, F: 41, S: 39, V: 55, Y: 29, Z: 52};
+const KEYCODE = {C: 54, F: 41, I: 31, S: 39, V: 55, Y: 29, Z: 52};
 const DIGIT_1_KEYCODE = 10;
 const DIGIT_0_KEYCODE = 19;
 
@@ -197,6 +197,13 @@ export class Annotator {
         this._movingTooltip = false;
 
         this._color = settings.get_string('tool-color');
+        this._customColor = this._loadCustomColor();
+        // Picking a colour from the screenshot: where the pointer is, the colour
+        // there once read, and whether a read is under way.
+        this._picking = false;
+        this._pickAt = null;
+        this._pickColor = null;
+        this._pickReading = false;
         this._widths = {...DEFAULT_WIDTHS};
         for (const [tool, width] of Object.entries(settings.get_value('tool-widths').deepUnpack())) {
             if (tool in DEFAULT_WIDTHS)
@@ -342,6 +349,11 @@ export class Annotator {
             console.warn(`screenshot-plus: bad text style: ${e.message}`);
             return {...DEFAULT_TEXT_STYLE};
         }
+    }
+
+    _loadCustomColor() {
+        const color = this._settings.get_string('custom-color');
+        return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : null;
     }
 
     _saveTextStyle() {
@@ -826,6 +838,7 @@ export class Annotator {
     _buildModifiers({withDelete = false} = {}) {
         const set = {colorButtons: new Map()};
         set.colorGroup = new St.BoxLayout({style_class: 'splus-group'});
+        set.palette = new St.BoxLayout({style_class: 'splus-group'});
         for (const color of COLORS) {
             const button = new St.Button({
                 style_class: 'splus-color',
@@ -835,8 +848,30 @@ export class Annotator {
             });
             button.connect('clicked', () => this._setColor(color));
             set.colorButtons.set(color, button);
-            set.colorGroup.add_child(button);
+            set.palette.add_child(button);
         }
+        // The last colour taken with the pipette, there once there is one.
+        set.customButton = new St.Button({
+            style_class: 'splus-color',
+            can_focus: false,
+            y_align: Clutter.ActorAlign.CENTER,
+            visible: false,
+        });
+        set.customButton.connect('clicked', () => {
+            if (this._customColor)
+                this._setColor(this._customColor);
+        });
+        this._addTooltip(set.customButton, 'customColor');
+        set.palette.add_child(set.customButton);
+        set.pipetteButton = this._toolButton('pipette', 'pipette', () => {
+            if (this._picking)
+                this._stopPicking();
+            else
+                this._startPicking();
+        });
+        set.pipetteButton.y_align = Clutter.ActorAlign.CENTER;
+        set.palette.add_child(set.pipetteButton);
+        set.colorGroup.add_child(set.palette);
 
         set.widthSeparator = this._separator();
         set.colorGroup.add_child(set.widthSeparator);
@@ -1212,6 +1247,7 @@ export class Annotator {
     }
 
     _setTool(id) {
+        this._stopPicking();
         this._commitText();
         this._finishPolyline();
         this._tool = id;
@@ -1327,9 +1363,15 @@ export class Annotator {
 
     _syncColor() {
         const active = this._activeColor();
-        for (const {colorButtons} of this._sets) {
+        const custom = this._customColor;
+        for (const {colorButtons, customButton, pipetteButton} of this._sets) {
             for (const [color, button] of colorButtons)
                 button.checked = color === active;
+            customButton.visible = custom !== null;
+            if (custom)
+                customButton.set_style(`background-color: ${custom};`);
+            customButton.checked = custom !== null && custom === active && !colorButtons.has(custom);
+            pipetteButton.checked = this._picking;
         }
 
         this._syncWidth();
@@ -1404,8 +1446,7 @@ export class Annotator {
         }
         const {type} = shape;
         const set = this._shapeSet;
-        for (const button of set.colorButtons.values())
-            button.visible = type !== 'pixelate';
+        set.palette.visible = type !== 'pixelate';
         set.widthSeparator.visible = type !== 'pixelate' && type !== 'text';
         set.widthGroup.visible = type !== 'text';
         set.fillButton.visible = FILLABLE.has(type);
@@ -1444,6 +1485,7 @@ export class Annotator {
         this._lastClick = null;
         this._live.hide();
         this._overlay.hide();
+        this._stopPicking();
         this._magnifier.hide();
         this._dropBase();
         this._syncUndo();
@@ -1704,7 +1746,7 @@ export class Annotator {
     // gets every pointer event before the actor under the pointer does.
     _passToSelection(event) {
         if (!this._tool || !this._ui.visible || !this._catcher.visible ||
-            this._dragGrab || this._polyline)
+            this._dragGrab || this._polyline || this._picking)
             return Clutter.EVENT_PROPAGATE;
         // Not over the toolbar, the text being typed and such.
         const target = global.stage.get_event_actor(event);
@@ -1768,6 +1810,8 @@ export class Annotator {
     }
 
     _onPress(event) {
+        if (this._picking)
+            return this._pressPicking(event);
         if (this._polyline)
             return this._pressPolyline(event);
         if (event.get_button() !== Clutter.BUTTON_PRIMARY || !this._tool)
@@ -1860,6 +1904,11 @@ export class Annotator {
     _onMotion(event) {
         const {x, y, shift} = pointerOf(event);
 
+        if (this._picking) {
+            this._hoverPicking(x, y);
+            return Clutter.EVENT_STOP;
+        }
+
         if (this._transform) {
             this._updateTransform(x, y, shift);
             return Clutter.EVENT_STOP;
@@ -1949,6 +1998,99 @@ export class Annotator {
         }
 
         return Clutter.EVENT_STOP;
+    }
+
+    // ---- pipette ----
+
+    // The next click takes the colour of the screenshot under the pointer, which
+    // the magnifier shows up close meanwhile. The canvas takes the pointer even
+    // with no tool, and GNOME's panel steps aside, so all of the screen can be
+    // picked from.
+    _startPicking() {
+        if (this._picking || !this._canAnnotate())
+            return;
+        this._finishPolyline();
+        this._picking = true;
+        this._pickColor = null;
+        this._setCatcherReactive(true);
+        this._catcher.set_cursor_type(Clutter.CursorType.CROSSHAIR);
+        this._hint.hide();
+        this._ui._panel.visible = false;
+        this._ui._closeButton.visible = false;
+        const [x, y] = global.get_pointer();
+        this._hoverPicking(x, y);
+        this._syncColor();
+    }
+
+    _stopPicking() {
+        if (!this._picking)
+            return;
+        this._picking = false;
+        this._pickAt = null;
+        this._magnifier.hide();
+        const drawing = this._tool !== null;
+        this._setCatcherReactive(drawing);
+        this._catcher.set_cursor_type(this._toolCursor());
+        this._ui._panel.visible = !drawing;
+        this._ui._closeButton.visible = !drawing;
+        this._syncColor();
+    }
+
+    _hoverPicking(x, y) {
+        this._pickAt = [x, y];
+        this._magnifier.show(x, y, this._pickColor ?? '', this._pickColor);
+        this._readPickColor();
+    }
+
+    // One read at a time, and again for where the pointer went meanwhile.
+    async _readPickColor() {
+        if (this._pickReading)
+            return;
+        this._pickReading = true;
+        try {
+            let at = null;
+            while (this._picking && this._pickAt && at !== this._pickAt) {
+                at = this._pickAt;
+                // eslint-disable-next-line no-await-in-loop
+                const color = await colorAt(this._ui, ...at);
+                if (this._picking && color) {
+                    this._pickColor = color;
+                    this._magnifier.show(...this._pickAt, color, color);
+                }
+            }
+        } catch (e) {
+            logError(e, 'screenshot-plus: cannot read the colour');
+        } finally {
+            this._pickReading = false;
+        }
+    }
+
+    _pressPicking(event) {
+        const button = event.get_button();
+        if (button === Clutter.BUTTON_SECONDARY) {
+            this._stopPicking();
+            return Clutter.EVENT_STOP;
+        }
+        if (button !== Clutter.BUTTON_PRIMARY)
+            return Clutter.EVENT_PROPAGATE;
+        const {x, y} = pointerOf(event);
+        this._stopPicking();
+        this._takeColorAt(x, y);
+        return Clutter.EVENT_STOP;
+    }
+
+    // It becomes the colour in use, and the one kept next to the palette.
+    async _takeColorAt(x, y) {
+        try {
+            const color = await colorAt(this._ui, x, y);
+            if (!color || !this._ui.visible)
+                return;
+            this._customColor = color;
+            this._settings.set_string('custom-color', color);
+            this._setColor(color);
+        } catch (e) {
+            logError(e, 'screenshot-plus: cannot read the colour');
+        }
     }
 
     // ---- broken lines ----
@@ -2254,6 +2396,13 @@ export class Annotator {
                 this._toggleFill();
                 return Clutter.EVENT_STOP;
             }
+            if (code === KEYCODE.I) {
+                if (this._picking)
+                    this._stopPicking();
+                else
+                    this._startPicking();
+                return Clutter.EVENT_STOP;
+            }
             if (code === DIGIT_0_KEYCODE) {
                 this._setTool(this._tool === 'select' ? null : 'select');
                 return Clutter.EVENT_STOP;
@@ -2274,6 +2423,10 @@ export class Annotator {
     _onEscape() {
         if (!this._ui.visible)
             return false;
+        if (this._picking) {
+            this._stopPicking();
+            return true;
+        }
         if (this._textActor) {
             this._discardText();
             return true;

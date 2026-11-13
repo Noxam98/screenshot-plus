@@ -265,3 +265,7 @@
   font-feature-settings: "tnum";
   padding-bottom: 2px;
 }
+
+.splus-magnifier-line {
+  spacing: 6px;
+}

@@ -50,6 +50,10 @@
       <default>'#e01b24'</default>
       <summary>Last used drawing colour</summary>
     </key>
+    <key name="custom-color" type="s">
+      <default>''</default>
+      <summary>The last colour taken with the pipette, as #rrggbb, kept next to the palette</summary>
+    </key>
     <key name="tool-widths" type="a{si}">
       <default>{}</default>
       <summary>Last used width per drawing tool, by tool id</summary>

@@ -19,6 +19,9 @@ interface in Russian; it follows the system language, see [Settings](#settings).
 - Pen, line, arrow, rectangle, ellipse, highlighter, text, pixelate and numbers.
 - Ten colours. Width is set with a slider or the mouse wheel, and every tool keeps its
   own: a thin pen and a thick highlighter do not overwrite each other.
+- The pipette (`I`) takes a colour from the screenshot itself: a magnifier shows the
+  pixels under the pointer and the colour's code, and a click takes it. That colour
+  then stays next to the palette.
 - A rectangle or an ellipse can be filled with its colour: the bucket button or `F`.
   Each of the two remembers whether it fills.
 - A click places a number; drag instead and it gets an arrow. Numbering runs across
@@ -92,6 +95,7 @@ controls for the tool.
 | `Enter` or the round button | save and copy |
 | `Ctrl+Z`, `Ctrl+Shift+Z` | undo, redo |
 | `F` | fill the rectangle or ellipse, or stop filling it |
+| `I` | pipette: take a colour from the screen |
 | `Delete` | delete the selected shape |
 | `Esc` | deselect, then close |
 | mouse wheel | width, text size |

@@ -443,3 +443,21 @@ export async function captureBase(ui, [lx, ly, lw, lh]) {
         GLib.unlink(path);
     }
 }
+
+// The colour of the screenshot's pixel under (x, y) in stage coordinates, as
+// #rrggbb, or null when there is no screenshot.
+export async function colorAt(ui, x, y) {
+    const content = ui._stageScreenshot.get_content();
+    if (!content)
+        return null;
+    const scale = ui._scale;
+    const {pixbuf} = await compositePng(content.get_texture(),
+        Math.floor(x * scale), Math.floor(y * scale), 1, 1, scale, {
+            texture: null,
+            x: 0,
+            y: 0,
+            scale: 1,
+        });
+    const bytes = pixbuf.read_pixel_bytes().toArray();
+    return `#${[0, 1, 2].map(i => bytes[i].toString(16).padStart(2, '0')).join('')}`;
+}

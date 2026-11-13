@@ -44,11 +44,23 @@ export class Magnifier {
         this._lens.add_child(this._marks);
         this.actor.add_child(this._lens);
 
-        this._label = new St.Label({
-            style_class: 'splus-magnifier-label',
+        // The text, with a swatch before it for a colour.
+        const line = new St.BoxLayout({
+            style_class: 'splus-magnifier-line',
             x_align: Clutter.ActorAlign.CENTER,
         });
-        this.actor.add_child(this._label);
+        this._swatch = new St.Widget({
+            style_class: 'splus-swatch',
+            y_align: Clutter.ActorAlign.CENTER,
+            visible: false,
+        });
+        line.add_child(this._swatch);
+        this._label = new St.Label({
+            style_class: 'splus-magnifier-label',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        line.add_child(this._label);
+        this.actor.add_child(line);
     }
 
     destroy() {
@@ -61,8 +73,9 @@ export class Magnifier {
         this._image.set_content(null);
     }
 
-    // Around (x, y) in stage coordinates, with `text` under the lens.
-    show(x, y, text) {
+    // Around (x, y) in stage coordinates, with `text` under the lens, and a
+    // swatch of `color` before it when given.
+    show(x, y, text, color = null) {
         const content = this._ui._stageScreenshot?.get_content();
         const [, textureWidth] = content?.get_preferred_size() ?? [false, 0];
         if (!content || textureWidth <= 0) {
@@ -81,6 +94,9 @@ export class Magnifier {
         this._image.set_position(middle - column * PIXEL_SIZE, middle - row * PIXEL_SIZE);
 
         this._label.text = text;
+        this._swatch.visible = color !== null;
+        if (color)
+            this._swatch.set_style(`background-color: ${color};`);
         this.actor.show();
         this._place(x, y);
     }
