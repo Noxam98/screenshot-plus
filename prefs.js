@@ -110,6 +110,12 @@ export default class ScreenshotPlusPreferences extends ExtensionPreferences {
         });
         settings.bind('tools-around-selection', around, 'active', Gio.SettingsBindFlags.DEFAULT);
         screenshots.add(around);
+        const magnifier = new Adw.SwitchRow({
+            title: t('prefs.magnifier'),
+            subtitle: t('prefs.magnifierHint'),
+        });
+        settings.bind('show-magnifier', magnifier, 'active', Gio.SettingsBindFlags.DEFAULT);
+        screenshots.add(magnifier);
         page.add(screenshots);
 
         // Short names in the list, what they mean underneath.

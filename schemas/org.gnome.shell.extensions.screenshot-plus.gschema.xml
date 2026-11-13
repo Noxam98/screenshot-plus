@@ -38,6 +38,10 @@
       <default>false</default>
       <summary>Spread the tool groups around the selection, the bottom edge first, as Flameshot does, instead of one bar under it</summary>
     </key>
+    <key name="show-magnifier" type="b">
+      <default>true</default>
+      <summary>While the selection is dragged out, show a magnifier at the pointer with the selection's size in pixels</summary>
+    </key>
     <key name="text-style" type="s">
       <default>'{}'</default>
       <summary>Last used text style as JSON: fontPx, outlineColor, outlineWidth, bgColor, bgAlpha, bgPadX, bgPadY</summary>

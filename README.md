@@ -72,6 +72,10 @@ controls for the tool.
   edges resize it as they do without a tool. The pointer changes, and a label next to
   it says which will happen: "New selection" or "Resize selection".
 - A stray click outside does not throw the selection away.
+- While you drag out or resize the selection, a magnifier next to the pointer shows the
+  screenshot's pixels under it up close, every physical pixel a square of its own, and
+  the size of the selection in the pixels of the picture you will get. It can be turned
+  off in the settings.
 - Drawings stay when the selection changes: whatever ends up outside is dimmed along
   with the screen. Only what is inside goes into the picture.
 - The selection can span both monitors, as in the native UI. The toolbar sits on the
@@ -116,6 +120,7 @@ Open them from the Extensions app, or with
   buttons stand in a column. A small selection gets them on the next round, further
   from its edge, and one that fills the screen gets them inside, in a row above the
   native panel.
+- **Magnifier.** On by default: see [Selection](#selection).
 - **Recording codec.** AV1 or H.264.
 - **Microphone.** Records sound from a microphone along with the screen, and which one:
   the default or any connected microphone. The list follows headsets being plugged in.

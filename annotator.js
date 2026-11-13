@@ -18,6 +18,7 @@ import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
 import {beginExport, captureBase, finishExport} from './exporter.js';
 import {t} from './i18n.js';
+import {Magnifier} from './magnifier.js';
 import {
     MAX_FONT,
     MAX_RADIUS,
@@ -242,12 +243,22 @@ export class Annotator {
         this._connect(ui._areaSelector, 'drag-started', () => {
             this._selectionDragging = true;
             this._sync();
+            this._onSelectionChanged();
         });
         this._connect(ui._areaSelector, 'drag-ended', () => {
             this._selectionDragging = false;
+            this._magnifier.hide();
             this._keepSelectionOnClick();
             this._sync();
         });
+        // Every change of the selection, dragged or not, comes through here.
+        const selector = ui._areaSelector;
+        const updateSelection = selector._updateSelectionRect;
+        selector._updateSelectionRect = (...args) => {
+            updateSelection.apply(selector, args);
+            this._onSelectionChanged();
+        };
+        this._selector = selector;
 
         this._connect(this._settings, 'changed::tools-around-selection', () => {
             this._arrange();
@@ -267,6 +278,7 @@ export class Annotator {
 
     destroy() {
         delete this._grabHelper?.ungrab; // Back to the prototype's.
+        delete this._selector?._updateSelectionRect;
         this._endDrag();
         this._discardText();
         // Before the later is removed, because this schedules one.
@@ -291,6 +303,7 @@ export class Annotator {
         this._catcher.destroy();
         this._drawing.destroy();
         this._hint.destroy();
+        this._magnifier.destroy();
         this._toolbar.destroy();
         for (const tooltip of this._tooltips) {
             tooltip.close(); // Cancels its pending show timeout.
@@ -399,6 +412,9 @@ export class Annotator {
         this._ui.add_child(this._catcher);
         this._ui.insert_child_below(this._drawing, this._ui._areaSelector);
         this._ui.add_child(this._hint);
+
+        this._magnifier = new Magnifier(this._ui);
+        this._ui.add_child(this._magnifier.actor);
     }
 
     _icon(name) {
@@ -948,7 +964,7 @@ export class Annotator {
     }
 
     // Order: selection and monitor actors < drawing < native panel < toolbar <
-    // tooltips < hint.
+    // tooltips < magnifier < hint.
     _stack() {
         const ui = this._ui;
         ui.set_child_below_sibling(this._catcher, ui._primaryMonitorBin);
@@ -957,6 +973,7 @@ export class Annotator {
         // Above the panels, which a tooltip beside a column could reach.
         for (const tooltip of this._tooltips)
             ui.set_child_above_sibling(tooltip, null);
+        ui.set_child_above_sibling(this._magnifier.actor, null);
         ui.set_child_above_sibling(this._hint, null);
     }
 
@@ -1003,6 +1020,21 @@ export class Annotator {
         this._syncShapeBar();
         this._syncTextRow();
         this._schedulePlacement();
+    }
+
+    // While a selection is dragged out or resized: the lens at the pointer, and
+    // the size in the screenshot's own pixels under it. Moving it changes neither.
+    _onSelectionChanged() {
+        const selector = this._ui._areaSelector;
+        if (!this._selectionDragging || !this._ui._selectionButton.checked ||
+            selector._dragCursor === Clutter.CursorType.MOVE ||
+            !this._settings.get_boolean('show-magnifier')) {
+            this._magnifier.hide();
+            return;
+        }
+        const [, , width, height] = this._ui._getSelectedGeometry(true);
+        const [x, y] = global.get_pointer();
+        this._magnifier.show(x, y, `${Math.round(width)} × ${Math.round(height)}`);
     }
 
     _selection() {
@@ -1412,6 +1444,7 @@ export class Annotator {
         this._lastClick = null;
         this._live.hide();
         this._overlay.hide();
+        this._magnifier.hide();
         this._dropBase();
         this._syncUndo();
         this._refreshCommitted();
