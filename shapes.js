@@ -72,7 +72,10 @@ function drawArrow(cr, shape) {
     // The shaft stops inside the head so its round cap cannot poke through.
     cr.lineTo(x2 - Math.cos(angle) * size * 0.8, y2 - Math.sin(angle) * size * 0.8);
     cr.stroke();
+    drawHead(cr, x2, y2, angle, size);
+}
 
+function drawHead(cr, x2, y2, angle, size) {
     cr.moveTo(x2, y2);
     cr.lineTo(x2 - size * Math.cos(angle - ARROW_ANGLE),
         y2 - size * Math.sin(angle - ARROW_ANGLE));
@@ -80,6 +83,32 @@ function drawArrow(cr, shape) {
         y2 - size * Math.sin(angle + ARROW_ANGLE));
     cr.closePath();
     cr.fill();
+}
+
+// A broken line through its points, with an arrow's head on the last one when
+// `head` is set. The head points along the last segment that has a length.
+function drawPolyline(cr, shape) {
+    const {points, width} = shape;
+    const [x2, y2] = points.at(-1);
+    const from = points.slice(0, -1).reverse().find(([x, y]) => x !== x2 || y !== y2);
+
+    setColor(cr, shape.color);
+    strokeSetup(cr, width);
+    const [first, ...rest] = points;
+    cr.moveTo(first[0], first[1]);
+    if (!shape.head || !from) {
+        for (const [x, y] of rest)
+            cr.lineTo(x, y);
+        cr.stroke();
+        return;
+    }
+    for (const [x, y] of rest.slice(0, -1))
+        cr.lineTo(x, y);
+    const angle = Math.atan2(y2 - from[1], x2 - from[0]);
+    const size = Math.min(arrowHeadSize(width), Math.hypot(x2 - from[0], y2 - from[1]));
+    cr.lineTo(x2 - Math.cos(angle) * size * 0.8, y2 - Math.sin(angle) * size * 0.8);
+    cr.stroke();
+    drawHead(cr, x2, y2, angle, size);
 }
 
 function rectOf({x1, y1, x2, y2}) {
@@ -327,6 +356,9 @@ export function drawShape(cr, shape, base = null) {
     case 'arrow':
         drawArrow(cr, shape);
         break;
+    case 'polyline':
+        drawPolyline(cr, shape);
+        break;
     case 'rect': {
         const [x, y, w, h] = rectOf(shape);
         setColor(cr, shape.color);
@@ -396,7 +428,8 @@ export function textCorners(shape) {
 export function shapeBox(shape) {
     switch (shape.type) {
     case 'pen':
-    case 'marker': {
+    case 'marker':
+    case 'polyline': {
         const xs = shape.points.map(p => p[0]);
         const ys = shape.points.map(p => p[1]);
         const left = Math.min(...xs);
@@ -432,6 +465,8 @@ function strokeReach(shape) {
         return markerWidth(shape.width);
     case 'arrow':
         return arrowHeadSize(shape.width);
+    case 'polyline':
+        return shape.head ? arrowHeadSize(shape.width) : shape.width;
     case 'text':
     case 'counter':
         return 2;
@@ -504,7 +539,8 @@ export function hitTest(shape, px, py, edgesOnly = false) {
     const reach = Math.max(HIT_TOLERANCE, shape.width ? shape.width / 2 + 3 : 0);
     switch (shape.type) {
     case 'pen':
-    case 'marker': {
+    case 'marker':
+    case 'polyline': {
         const tolerance = shape.type === 'marker'
             ? markerWidth(shape.width) / 2 + 3 : reach;
         const {points} = shape;
@@ -554,9 +590,12 @@ const BOX_HANDLES = {
     w: [0, 0.5],
 };
 
-// Lines stretch by their ends. Text has two side handles that turn and scale it
-// around each other, and a grip above it for moving. Everything else gets a box.
+// Lines stretch by their ends, and broken lines have a handle on every point.
+// Text has two side handles that turn and scale it around each other, and a grip
+// above it for moving. Everything else gets a box.
 export function handlesOf(shape) {
+    if (shape.type === 'polyline')
+        return shape.points.map(([x, y], i) => ({id: `v${i}`, x, y}));
     if (shape.type === 'line' || shape.type === 'arrow') {
         return [
             {id: 'p1', x: shape.x1, y: shape.y1},
@@ -608,6 +647,7 @@ export function moveShape(shape, dx, dy) {
     switch (shape.type) {
     case 'pen':
     case 'marker':
+    case 'polyline':
         return {...shape, points: shape.points.map(([x, y]) => [x + dx, y + dy])};
     case 'text':
         return {...shape, x: shape.x + dx, y: shape.y + dy};
@@ -700,6 +740,18 @@ export function resizeShape(shape, handle, px, py, keepAspect = false) {
 
     if (handle === 'tip')
         return withTip(shape, px, py, keepAspect);
+
+    // A point of a broken line. Shift keeps its segment from the point before it
+    // at 45-degree steps, or to the next one for the first point.
+    const vertex = /^v(\d+)$/.exec(handle);
+    if (vertex) {
+        const index = Number(vertex[1]);
+        const points = shape.points.map(point => [...point]);
+        const neighbour = points[index > 0 ? index - 1 : 1];
+        points[index] = keepAspect && neighbour
+            ? constrainEnd('line', neighbour[0], neighbour[1], px, py) : [px, py];
+        return {...shape, points};
+    }
 
     if (handle === 'p1' || handle === 'p2') {
         const [ax, ay, field] = handle === 'p1'

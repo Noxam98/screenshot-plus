@@ -157,6 +157,8 @@ function unionOf(boxes) {
     return right > left && bottom > top ? [left, top, right - left, bottom - top] : null;
 }
 const snapshotOf = shapes => shapes.map(shape => ({...shape}));
+// The tool that draws a shape, for the width it remembers.
+const toolOf = shape => shape?.type === 'polyline' ? (shape.head ? 'arrow' : 'line') : shape?.type;
 
 export class Annotator {
     constructor(ui, settings, extensionPath) {
@@ -169,6 +171,9 @@ export class Annotator {
         this._undoStack = [];
         this._redoStack = [];
         this._current = null;
+        // A broken line being clicked out, point by point, is in _current.
+        this._polyline = false;
+        this._polylinePress = null;
         this._selected = null;
         this._transform = null;
         this._textActor = null;
@@ -656,10 +661,13 @@ export class Annotator {
             this._updateOverlay();
         }
 
-        this._widths[type] = width;
+        this._widths[toolOf(shape) ?? type] = width;
         this._saveWidthsLater();
 
-        if (this._current?.type === type) {
+        if (this._polyline) {
+            this._current.width = width;
+            this._updateLive();
+        } else if (this._current?.type === type) {
             if (type === 'counter')
                 this._current.radius = counterRadius(width);
             else
@@ -1171,6 +1179,7 @@ export class Annotator {
 
     _setTool(id) {
         this._commitText();
+        this._finishPolyline();
         this._tool = id;
 
         for (const [toolId, button] of this._toolButtons ?? [])
@@ -1250,7 +1259,7 @@ export class Annotator {
         this._color = color;
         this._settings.set_string('tool-color', color);
 
-        if (this._textActor) {
+        if (this._textActor || this._polyline) {
             this._current.color = color;
             this._updateLive();
         } else if (this._selected && this._selected.type !== 'pixelate') {
@@ -1391,6 +1400,8 @@ export class Annotator {
         this._undoStack = [];
         this._redoStack = [];
         this._current = null;
+        this._polyline = false;
+        this._polylinePress = null;
         this._transform = null;
         this._selected = null;
         this._selectionDragging = false;
@@ -1468,7 +1479,7 @@ export class Annotator {
                 cr.setLineWidth(1.5);
                 cr.setSourceRGBA(1, 1, 1, 0.9);
                 cr.stroke();
-            } else if (shape.type !== 'line' && shape.type !== 'arrow') {
+            } else if (shape.type !== 'line' && shape.type !== 'arrow' && shape.type !== 'polyline') {
                 const [x, y, w, h] = shapeBox(shape);
                 this._strokeDashed(cr, [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]);
             }
@@ -1685,6 +1696,8 @@ export class Annotator {
     }
 
     _onPress(event) {
+        if (this._polyline)
+            return this._pressPolyline(event);
         if (event.get_button() !== Clutter.BUTTON_PRIMARY || !this._tool)
             return Clutter.EVENT_PROPAGATE;
 
@@ -1783,6 +1796,12 @@ export class Annotator {
             return Clutter.EVENT_PROPAGATE;
         }
 
+        if (this._polyline) {
+            this._current.points[this._current.points.length - 1] = this._polylinePoint(x, y, shift);
+            this._updateLive();
+            return Clutter.EVENT_STOP;
+        }
+
         const shape = this._current;
         if (shape.type === 'counter') {
             this._current = withTip(shape, x, y, shift);
@@ -1804,7 +1823,7 @@ export class Annotator {
         const selectionCursor = this._selectionTakes(x, y);
         let cursor = this._toolCursor();
         if (handle) {
-            cursor = HANDLE_CURSORS[handle.id];
+            cursor = HANDLE_CURSORS[handle.id] ?? Clutter.CursorType.CROSSHAIR;
         } else if (selectionCursor !== null) {
             cursor = selectionCursor;
         } else if (this._selected) {
@@ -1827,6 +1846,11 @@ export class Annotator {
             return Clutter.EVENT_STOP;
         }
 
+        if (this._polyline) {
+            this._releasePolyline(event);
+            return Clutter.EVENT_STOP;
+        }
+
         if (!this._current || this._textActor)
             return Clutter.EVENT_PROPAGATE;
 
@@ -1834,6 +1858,13 @@ export class Annotator {
         this._current = null;
         this._endDrag();
         this._live.hide();
+
+        // A click with the line or the arrow starts a broken one.
+        if ((shape.type === 'line' || shape.type === 'arrow') &&
+            Math.hypot(shape.x2 - shape.x1, shape.y2 - shape.y1) <= CLICK_SLOP) {
+            this._startPolyline(shape);
+            return Clutter.EVENT_STOP;
+        }
 
         // A click without a drag leaves nothing visible for box-like shapes.
         const empty = !shape.points && shape.type !== 'counter' &&
@@ -1844,6 +1875,93 @@ export class Annotator {
         }
 
         return Clutter.EVENT_STOP;
+    }
+
+    // ---- broken lines ----
+
+    // The last point follows the pointer until the next click puts it down. Shift
+    // keeps the segment to it at 45-degree steps.
+    _startPolyline({type, color, width, x1, y1}) {
+        this._current = {type: 'polyline', color, width, head: type === 'arrow', points: [[x1, y1], [x1, y1]]};
+        this._polyline = true;
+        this._polylinePress = null;
+        this._updateLive();
+    }
+
+    _polylinePoint(x, y, shift) {
+        const {points} = this._current;
+        const [px, py] = points[points.length - 2];
+        return shift ? constrainEnd('line', px, py, x, y) : [x, y];
+    }
+
+    // A click puts the point down, a double-click or the right button ends the
+    // line there.
+    _pressPolyline(event) {
+        const button = event.get_button();
+        if (button === Clutter.BUTTON_SECONDARY) {
+            this._finishPolyline();
+            return Clutter.EVENT_STOP;
+        }
+        if (button !== Clutter.BUTTON_PRIMARY)
+            return Clutter.EVENT_PROPAGATE;
+
+        const {x, y, shift} = pointerOf(event);
+        if (this._isDoubleClick(event, x, y)) {
+            this._finishPolyline();
+            return Clutter.EVENT_STOP;
+        }
+        this._placePolylinePoint(this._polylinePoint(x, y, shift));
+        this._polylinePress = {x, y};
+        return Clutter.EVENT_STOP;
+    }
+
+    // Dragged instead of clicked: that segment ends where it was let go.
+    _releasePolyline(event) {
+        const press = this._polylinePress;
+        this._polylinePress = null;
+        if (event.get_button() !== Clutter.BUTTON_PRIMARY || !press)
+            return;
+        const {x, y, shift} = pointerOf(event);
+        if (Math.hypot(x - press.x, y - press.y) > CLICK_SLOP)
+            this._placePolylinePoint(this._polylinePoint(x, y, shift));
+    }
+
+    _placePolylinePoint(point) {
+        const {points} = this._current;
+        points[points.length - 1] = point;
+        points.push([...point]);
+        this._updateLive();
+    }
+
+    // Backspace and Ctrl+Z take back the last point put down.
+    _unplacePolylinePoint() {
+        const {points} = this._current;
+        if (points.length <= 2) {
+            this._cancelPolyline();
+            return;
+        }
+        points.splice(points.length - 2, 1);
+        this._updateLive();
+    }
+
+    // Without the point that follows the pointer, and with no point twice in a row.
+    _finishPolyline() {
+        if (!this._polyline)
+            return;
+        const shape = this._current;
+        this._cancelPolyline();
+        const points = shape.points.slice(0, -1).filter((point, i, all) =>
+            i === 0 || point[0] !== all[i - 1][0] || point[1] !== all[i - 1][1]);
+        if (points.length >= 2)
+            this._commit({...shape, points}, true);
+    }
+
+    _cancelPolyline() {
+        this._polyline = false;
+        this._polylinePress = null;
+        this._current = null;
+        this._lastClick = null;
+        this._live.hide();
     }
 
     // The offset is where on the handle it was grabbed, so it does not jump to the
@@ -2015,6 +2133,17 @@ export class Annotator {
                 return Clutter.EVENT_PROPAGATE;
         }
 
+        if (this._polyline) {
+            if (symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) {
+                this._finishPolyline();
+                return Clutter.EVENT_STOP;
+            }
+            if (symbol === Clutter.KEY_BackSpace || (ctrl && code === KEYCODE.Z && !shift)) {
+                this._unplacePolylinePoint();
+                return Clutter.EVENT_STOP;
+            }
+        }
+
         if (ctrl) {
             switch (code) {
             case KEYCODE.C:
@@ -2063,13 +2192,17 @@ export class Annotator {
         return Clutter.EVENT_PROPAGATE;
     }
 
-    // Esc takes back the text being typed, then peels off the selected shape,
-    // and only then closes everything.
+    // Esc takes back what is in progress, then peels off the selected shape, and
+    // only then closes everything.
     _onEscape() {
         if (!this._ui.visible)
             return false;
         if (this._textActor) {
             this._discardText();
+            return true;
+        }
+        if (this._polyline) {
+            this._cancelPolyline();
             return true;
         }
         if (this._selected) {
@@ -2117,12 +2250,17 @@ export class Annotator {
     // Text is committed before the stacks are read, because committing replaces
     // the redo stack.
     _undo() {
+        if (this._polyline) {
+            this._unplacePolylinePoint();
+            return;
+        }
         this._commitText();
         this._restore(this._undoStack, this._redoStack);
     }
 
     _redo() {
         this._commitText();
+        this._finishPolyline();
         this._restore(this._redoStack, this._undoStack);
     }
 
@@ -2286,6 +2424,7 @@ export class Annotator {
     // moment the key is pressed.
     _exportAndClose(options) {
         this._commitText();
+        this._finishPolyline();
 
         // An app asked for this screenshot, and it takes the UI closing before the
         // file exists as a cancel. That one has to finish first.

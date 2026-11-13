@@ -23,6 +23,10 @@ interface in Russian; it follows the system language, see [Settings](#settings).
   Each of the two remembers whether it fills.
 - A click places a number; drag instead and it gets an arrow. Numbering runs across
   all of them.
+- Line and arrow: drag for a straight one, or click point by point for a broken one.
+  A double-click, `Enter` or the right button ends it, `Backspace` takes back the
+  last point, `Esc` drops it. A broken arrow has its head on the last point. Each
+  point has its own handle afterwards.
 - Pixelate hides passwords and anything else that must not end up in the picture. The
   file holds only the blocks there, none of the original pixels.
 - `Shift` while drawing gives exact 45° steps and squares.
@@ -88,6 +92,7 @@ controls for the tool.
 | `Esc` | deselect, then close |
 | mouse wheel | width, text size |
 | `Shift` while drawing | exact 45° and squares |
+| `Enter`, `Backspace`, `Esc` on a broken line | end it, take back a point, drop it |
 
 Shortcuts are bound to physical keys, so they work with any keyboard layout.
 

@@ -199,5 +199,28 @@ check('filled rect inside when drawing', hitTest({...rect, fill: true}, 200, 150
 check('filled ellipse centre when drawing', hitTest({...ellipse, fill: true}, 200, 150, true));
 check('filled ellipse corner stays outside', !hitTest({...ellipse, fill: true}, 105, 105, true));
 
+// A broken line: hit along every segment, a handle per point, points move alone.
+const broken = {type: 'polyline', color: '#ff0000', width: 4, points: [[0, 0], [100, 0], [100, 100]]};
+check('polyline hit on first segment', hitTest(broken, 50, 2));
+check('polyline hit on second segment', hitTest(broken, 98, 50));
+check('polyline misses the open corner', !hitTest(broken, 30, 70));
+check('polyline handles', handlesOf(broken).map(h => h.id).join() === 'v0,v1,v2');
+r = resizeShape(broken, 'v1', 120, 10);
+check('polyline point moves alone', r.points[1][0] === 120 && r.points[0][0] === 0 && r.points[2][1] === 100 &&
+    broken.points[1][0] === 100, JSON.stringify(r.points));
+r = resizeShape(broken, 'v2', 140, 95, true);
+check('polyline shift snaps to the point before', near(r.points[2][1], 0, 0.01) || near(r.points[2][0] - 100, r.points[2][1], 0.01),
+    JSON.stringify(r.points));
+r = resizeShape(broken, 'v0', 10, 40, true);
+check('polyline shift on the first point uses the next', near(r.points[0][1], 0, 0.01) || near(Math.abs(r.points[0][0] - 100), Math.abs(r.points[0][1]), 0.01),
+    JSON.stringify(r.points));
+r = moveShape(broken, 5, 7);
+check('polyline moves whole', r.points[2][0] === 105 && r.points[2][1] === 107 && broken.points[2][0] === 100);
+const [, , boxW, boxH] = shapeBox(broken);
+check('polyline box', boxW === 100 && boxH === 100);
+const [hx, hy] = shapeBounds({...broken, head: true});
+const [lx, ly] = shapeBounds(broken);
+check('a head reaches further than the line', hx < lx && hy < ly);
+
 print(failed ? `${failed} FAILED` : 'all shape checks passed');
 exit(failed ? 1 : 0);
