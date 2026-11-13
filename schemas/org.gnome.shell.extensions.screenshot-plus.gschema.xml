@@ -34,6 +34,10 @@
       <default>true</default>
       <summary>Mark clicks with a circle in recordings that show the pointer</summary>
     </key>
+    <key name="tools-around-selection" type="b">
+      <default>false</default>
+      <summary>Spread the tool groups around the selection, the bottom edge first, as Flameshot does, instead of one bar under it</summary>
+    </key>
     <key name="text-style" type="s">
       <default>'{}'</default>
       <summary>Last used text style as JSON: fontPx, outlineColor, outlineWidth, bgColor, bgAlpha, bgPadX, bgPadY</summary>

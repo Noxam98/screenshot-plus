@@ -17,7 +17,7 @@ chmod 700 "$RUN"
 ln -s "$EXT" "$W/data/gnome-shell/extensions/screenshot-plus@maksym"
 D="$W/data/gnome-shell/extensions/testdriver@local"; mkdir -p "$D"
 cat > "$D/metadata.json" <<'J'
-{"uuid":"testdriver@local","name":"Test driver","description":"Opens Eval for tests","shell-version":["50"],"session-modes":["user","unlock-dialog"]}
+{"uuid":"testdriver@local","name":"Test driver","description":"Opens Eval for tests","shell-version":["50","51"],"session-modes":["user","unlock-dialog"]}
 J
 cp "$EXT/tests/driver.js" "$D/extension.js"
 export HOME="$W/home" XDG_CONFIG_HOME="$W/config" XDG_DATA_HOME="$W/data" XDG_CACHE_HOME="$W/cache"

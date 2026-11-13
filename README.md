@@ -96,6 +96,13 @@ Open them from the Extensions app, or with
   and Esperanto. Translations other than English and Russian were written without a
   native speaker, so corrections are welcome: the strings are in `translations.js`.
 - **Screenshot sound.** Soft click, GNOME's shutter, or none.
+- **Tools around the selection.** Off by default: one bar under the selection. On:
+  the tools, the colours and the undo, copy and save buttons spread over the edges of
+  the selection, like Flameshot's buttons. Along the bottom edge first, as many as fit
+  there, the rest on the right, the top and the left; on the sides the tools and the
+  buttons stand in a column. A small selection gets them on the next round, further
+  from its edge, and one that fills the screen gets them inside, in a row above the
+  native panel.
 - **Recording codec.** AV1 or H.264.
 - **Microphone.** Records sound from a microphone along with the screen, and which one:
   the default or any connected microphone. The list follows headsets being plugged in.
@@ -184,7 +191,8 @@ is needed only when `extension.js` or `metadata.json` themselves change.
 
 `tests/session.sh` starts a separate GNOME Shell with no screen and its own `HOME`,
 dconf and D-Bus, so the real session is left alone. `tests/ctl.sh` drives it and sends
-input, `tests/stop.sh` stops it. `gjs -m tests/shapes-test.js` checks the geometry.
+input, `tests/stop.sh` stops it. `gjs -m tests/shapes-test.js` checks the geometry of
+the shapes, `gjs -m tests/layout-test.js` the placement of the tools around the selection.
 
 ## License
 

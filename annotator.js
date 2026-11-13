@@ -43,6 +43,7 @@ import {
     withTip,
     textFont,
 } from './shapes.js';
+import {placeGroups} from './toolLayout.js';
 
 const SELECT_TOOL = {id: 'select', icon: 'select', label: 'tool.select'};
 
@@ -79,6 +80,8 @@ const DEFAULT_TEXT_STYLE = {
 const UI_MODE_SCREENSHOT_ONLY = 2;
 
 const TOOLBAR_GAP = 8;
+// Between the panels when they stand around the selection.
+const GROUP_SPACING = 6;
 const counterRadius = width => 10 + width * 2;
 // A press and release this close together is a click, not a drag.
 const CLICK_SLOP = 3;
@@ -180,6 +183,7 @@ export class Annotator {
         this._scrollRemainder = 0;
         this._lastScrollUndo = 0;
         this._lastClick = null;
+        this._movingTooltip = false;
 
         this._color = settings.get_string('tool-color');
         this._widths = {...DEFAULT_WIDTHS};
@@ -221,6 +225,11 @@ export class Annotator {
         this._connect(ui._areaSelector, 'drag-ended', () => {
             this._selectionDragging = false;
             this._keepSelectionOnClick();
+            this._sync();
+        });
+
+        this._connect(this._settings, 'changed::tools-around-selection', () => {
+            this._arrange();
             this._sync();
         });
 
@@ -397,8 +406,39 @@ export class Annotator {
         this._translate(() => {
             tooltip.text = t(key);
         });
+        // GNOME puts it above the button, which in a column is the button above.
+        for (const property of ['notify::x', 'notify::y'])
+            tooltip.connect(property, () => this._besideInColumn(tooltip, widget));
         this._ui.add_child(tooltip);
         this._tooltips.push(tooltip);
+    }
+
+    // Beside the column instead, on the side away from the selection while
+    // the stage has room there.
+    _besideInColumn(tooltip, widget) {
+        const box = widget.get_parent();
+        if (this._movingTooltip || !(box instanceof St.BoxLayout) ||
+            box.orientation !== Clutter.Orientation.VERTICAL)
+            return;
+        const panel = [this._toolPanel, this._actionPanel].find(p => p.contains(widget));
+        if (!panel)
+            return;
+        const [panelX] = panel.get_transformed_position();
+        const [panelWidth] = panel.get_transformed_size();
+        const [, y] = widget.get_transformed_position();
+        const [, height] = widget.get_transformed_size();
+
+        const right = panelX + panelWidth + GROUP_SPACING;
+        const left = panelX - GROUP_SPACING - tooltip.width;
+        const rect = this._selection();
+        const outwardLeft = rect && panelX + panelWidth / 2 < rect[0] + rect[2] / 2;
+        const x = outwardLeft
+            ? (left >= 0 ? left : right)
+            : (right + tooltip.width <= global.stage.width ? right : left);
+
+        this._movingTooltip = true;
+        tooltip.set_position(Math.round(x), Math.round(y + (height - tooltip.height) / 2));
+        this._movingTooltip = false;
     }
 
     _toolButton(icon, label, onClick, styleClass = 'splus-tool') {
@@ -416,29 +456,97 @@ export class Annotator {
         return new St.Widget({style_class: 'splus-separator', y_expand: true});
     }
 
-    _buildToolbar() {
-        this._tooltips = [];
-        this._toolbar = new St.BoxLayout({
+    // Columns for the right and the left of the selection, rows otherwise. A
+    // separator in a column lies across it.
+    _setUpright(boxes, separators, upright) {
+        for (const box of boxes) {
+            box.orientation = upright
+                ? Clutter.Orientation.VERTICAL : Clutter.Orientation.HORIZONTAL;
+        }
+        for (const separator of separators) {
+            separator.style_class = upright ? 'splus-separator-across' : 'splus-separator';
+            separator.y_expand = !upright;
+        }
+        // A box turning does not reach the sizes its parents keep, so the
+        // panel around it would stay the old shape.
+        for (const box of boxes) {
+            for (let actor = box; actor && actor !== this._toolbar; actor = actor.get_parent())
+                actor.queue_relayout();
+        }
+    }
+
+    _panel(orientation = Clutter.Orientation.HORIZONTAL) {
+        const panel = new St.BoxLayout({
             style_class: 'splus-toolbar',
-            orientation: Clutter.Orientation.VERTICAL,
+            orientation,
             reactive: true,
             visible: false,
         });
-        this._toolbar.connect('scroll-event', (_a, e) => this._onScroll(e));
+        panel.connect('scroll-event', (_a, e) => this._onScroll(e));
+        this._toolbar.add_child(panel);
+        return panel;
+    }
 
-        this._mainRow = new St.BoxLayout({style_class: 'splus-row'});
-        this._toolbar.add_child(this._mainRow);
-        this._buildMainRow();
+    // The same groups show in one of two ways: one bar under the selection, or
+    // with tools-around-selection a panel for each group around it, placed by
+    // toolLayout.js. They move between the two when the setting changes.
+    _buildToolbar() {
+        this._tooltips = [];
+        // Spans the stage, so the panels in it are placed in stage coordinates.
+        this._toolbar = new St.Widget({visible: false, x: 0, y: 0});
+        this._toolbar.add_constraint(new Clutter.BindConstraint({
+            source: global.stage,
+            coordinate: Clutter.BindCoordinate.SIZE,
+        }));
+        this._ui.add_child(this._toolbar);
 
+        this._buildGroups();
         this._textRow = new St.BoxLayout({style_class: 'splus-row splus-text-row', visible: false});
-        this._toolbar.add_child(this._textRow);
         this._buildTextRow();
 
-        this._ui.add_child(this._toolbar);
+        this._bar = this._panel(Clutter.Orientation.VERTICAL);
+        this._mainRow = new St.BoxLayout({style_class: 'splus-row'});
+        this._barSeparators = [this._separator(), this._separator()];
+        for (const separator of this._barSeparators)
+            this._mainRow.add_child(separator);
+        this._bar.add_child(this._mainRow);
+
+        this._toolPanel = this._panel();
+        this._colorPanel = this._panel(Clutter.Orientation.VERTICAL);
+        this._actionPanel = this._panel();
+
+        this._around = null;
+        this._arrange();
 
         this._syncColor();
         this._syncUndo();
         this._syncTextRow();
+    }
+
+    // Puts the groups in the bar, or each in its own panel.
+    _arrange() {
+        const around = this._settings.get_boolean('tools-around-selection');
+        if (around === this._around)
+            return;
+        this._around = around;
+
+        for (const group of [this._toolGroup, this._colorGroup, this._actionGroup, this._textRow])
+            group.get_parent()?.remove_child(group);
+        this._setUpright([this._toolGroup], [], false);
+        this._setUpright([this._actionGroup, this._undoGroup], [this._undoSeparator], false);
+
+        if (around) {
+            this._toolPanel.add_child(this._toolGroup);
+            this._colorPanel.add_child(this._colorGroup);
+            this._colorPanel.add_child(this._textRow);
+            this._actionPanel.add_child(this._actionGroup);
+        } else {
+            const [first] = this._barSeparators;
+            this._mainRow.insert_child_below(this._toolGroup, first);
+            this._mainRow.insert_child_above(this._colorGroup, first);
+            this._mainRow.add_child(this._actionGroup);
+            this._bar.add_child(this._textRow);
+        }
     }
 
     // A preview dot, GNOME's own slider and the number.
@@ -573,7 +681,9 @@ export class Annotator {
         this._settings.set_value('tool-widths', new GLib.Variant('a{si}', this._widths));
     }
 
-    _buildMainRow() {
+    // Tools; colours and width; undo, redo, copy, save and close. In the bar
+    // separators stand between them.
+    _buildGroups() {
         this._toolGroup = new St.BoxLayout({style_class: 'splus-group'});
         this._toolButtons = new Map();
         for (const tool of [SELECT_TOOL, ...DRAW_TOOLS]) {
@@ -583,10 +693,8 @@ export class Annotator {
             this._toolButtons.set(tool.id, button);
             this._toolGroup.add_child(button);
         }
-        this._mainRow.add_child(this._toolGroup);
 
         this._colorGroup = new St.BoxLayout({style_class: 'splus-group'});
-        this._colorGroup.add_child(this._separator());
         this._colorButtons = new Map();
         for (const color of COLORS) {
             const button = new St.Button({
@@ -602,16 +710,18 @@ export class Annotator {
 
         this._colorGroup.add_child(this._separator());
         this._colorGroup.add_child(this._buildWidthControl());
-        this._colorGroup.add_child(this._separator());
-        this._mainRow.add_child(this._colorGroup);
 
+        // Undo and redo are a group of their own, hidden where there is
+        // nothing to draw on.
+        this._actionGroup = new St.BoxLayout({style_class: 'splus-group'});
         this._undoGroup = new St.BoxLayout({style_class: 'splus-group'});
         this._undoButton = this._toolButton('undo', 'undo', () => this._undo());
         this._redoButton = this._toolButton('redo', 'redo', () => this._redo());
+        this._undoSeparator = this._separator();
         this._undoGroup.add_child(this._undoButton);
         this._undoGroup.add_child(this._redoButton);
-        this._undoGroup.add_child(this._separator());
-        this._mainRow.add_child(this._undoGroup);
+        this._undoGroup.add_child(this._undoSeparator);
+        this._actionGroup.add_child(this._undoGroup);
 
         this._copyButton = this._toolButton('copy', 'copy', () => {
             this._exportAndClose({copy: true, save: false});
@@ -619,9 +729,9 @@ export class Annotator {
         this._saveButton = this._toolButton('save', 'save', () => {
             this._exportAndClose({copy: false, save: true});
         }, 'splus-tool splus-action');
-        this._mainRow.add_child(this._copyButton);
-        this._mainRow.add_child(this._saveButton);
-        this._mainRow.add_child(this._toolButton('close', 'close', () => {
+        this._actionGroup.add_child(this._copyButton);
+        this._actionGroup.add_child(this._saveButton);
+        this._actionGroup.add_child(this._toolButton('close', 'close', () => {
             this._ui.close();
         }));
     }
@@ -728,12 +838,16 @@ export class Annotator {
         this._bgWidthStepper = padding('text.bgWidth', 'bgPadX');
     }
 
-    // Order: selection and monitor actors < drawing < native panel < toolbar.
+    // Order: selection and monitor actors < drawing < native panel < toolbar <
+    // tooltips < hint.
     _stack() {
         const ui = this._ui;
         ui.set_child_below_sibling(this._catcher, ui._primaryMonitorBin);
         ui.set_child_below_sibling(this._drawing, ui._areaSelector);
         ui.set_child_above_sibling(this._toolbar, null);
+        // Above the panels, which a tooltip beside a column could reach.
+        for (const tooltip of this._tooltips)
+            ui.set_child_above_sibling(tooltip, null);
         ui.set_child_above_sibling(this._hint, null);
     }
 
@@ -764,6 +878,12 @@ export class Annotator {
         this._toolGroup.visible = annotate;
         this._colorGroup.visible = annotate;
         this._undoGroup.visible = annotate;
+        for (const separator of this._barSeparators)
+            separator.visible = annotate;
+        this._bar.visible = !this._around;
+        this._toolPanel.visible = this._around && annotate;
+        this._colorPanel.visible = this._around && annotate;
+        this._actionPanel.visible = this._around;
 
         this._toolbar.visible = ui.visible && ui._shotButton.checked &&
             !this._selectionDragging && !Main.sessionMode.isLocked;
@@ -815,8 +935,8 @@ export class Annotator {
             });
     }
 
-    // Sits next to the selection on whichever monitor holds most of it, and
-    // keeps clear of the native panel on the primary monitor.
+    // On whichever monitor holds most of the selection, clear of the native
+    // panel on the primary monitor.
     _placeToolbar() {
         if (!this._toolbar.visible)
             return;
@@ -842,30 +962,70 @@ export class Annotator {
             this._panelTop = panelY;
         }
 
-        const bottomLimit = index === layout.primaryIndex && this._panelTop !== null
-            ? this._panelTop - TOOLBAR_GAP
-            : monitor.y + monitor.height - TOOLBAR_GAP;
-        const topLimit = monitor.y + TOOLBAR_GAP;
-
-        const [, , width, height] = this._toolbar.get_preferred_size();
-
-        const [sx, sy, sw, sh] = rect ?? [monitor.x, bottomLimit, monitor.width, 0];
-
-        let y;
+        const area = {
+            left: monitor.x + TOOLBAR_GAP,
+            top: monitor.y + TOOLBAR_GAP,
+            right: monitor.x + monitor.width - TOOLBAR_GAP,
+            bottom: index === layout.primaryIndex && this._panelTop !== null
+                ? this._panelTop - TOOLBAR_GAP
+                : monitor.y + monitor.height - TOOLBAR_GAP,
+        };
         // Clear of the corner handles, which are there to be grabbed.
         const gap = rect ? ui._areaSelector._handleSize / 2 + TOOLBAR_GAP : TOOLBAR_GAP;
-        if (sy + sh + gap + height <= bottomLimit)
+
+        if (this._around)
+            this._placeAround(rect, area, gap);
+        else
+            this._placeBar(rect, area, gap, monitor);
+    }
+
+    // Under the selection, else over it, else inside it at the bottom.
+    _placeBar(rect, area, gap, monitor) {
+        const [, , width, height] = this._bar.get_preferred_size();
+        const [sx, sy, sw, sh] = rect ?? [monitor.x, area.bottom, monitor.width, 0];
+
+        let y;
+        if (sy + sh + gap + height <= area.bottom)
             y = sy + sh + gap;
-        else if (sy - gap - height >= topLimit)
+        else if (sy - gap - height >= area.top)
             y = sy - gap - height;
         else
-            y = bottomLimit - height;
+            y = area.bottom - height;
 
-        const minX = monitor.x + TOOLBAR_GAP;
-        const maxX = monitor.x + monitor.width - width - TOOLBAR_GAP;
-        const x = Math.max(minX, Math.min(maxX, sx + (sw - width) / 2));
+        const x = Math.max(area.left, Math.min(area.right - width, sx + (sw - width) / 2));
 
-        this._toolbar.set_position(Math.round(x), Math.round(y));
+        this._bar.set_position(Math.round(x), Math.round(y));
+    }
+
+    _placeAround(rect, area, gap) {
+        const sizeOf = actor => {
+            const [, , width, height] = actor.get_preferred_size();
+            return [width, height];
+        };
+        // Measured both ways, then left the way it goes.
+        const turning = (id, panel, boxes, separators) => {
+            const upright = value => this._setUpright(boxes, separators, value);
+            upright(true);
+            const column = sizeOf(panel);
+            upright(false);
+            return {id, panel, upright, row: sizeOf(panel), column};
+        };
+        const groups = [];
+        if (this._toolPanel.visible)
+            groups.push(turning('tools', this._toolPanel, [this._toolGroup], []));
+        if (this._colorPanel.visible)
+            groups.push({id: 'colors', panel: this._colorPanel, row: sizeOf(this._colorPanel), column: null});
+        if (this._actionPanel.visible) {
+            groups.push(turning('actions', this._actionPanel,
+                [this._actionGroup, this._undoGroup], [this._undoSeparator]));
+        }
+
+        const places = placeGroups({groups, rect, area, gap, spacing: GROUP_SPACING});
+        for (const {id, panel, upright} of groups) {
+            const {x, y, vertical} = places.get(id);
+            upright?.(vertical);
+            panel.set_position(x, y);
+        }
     }
 
     _setTool(id) {

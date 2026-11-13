@@ -1,4 +1,4 @@
-// Preferences window: language, screenshot sound and recording.
+// Preferences window: language, screenshots and recording.
 
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
@@ -104,6 +104,12 @@ export default class ScreenshotPlusPreferences extends ExtensionPreferences {
         const screenshots = new Adw.PreferencesGroup({title: t('prefs.screenshots')});
         screenshots.add(choiceRow(settings, 'screenshot-sound', t('prefs.sound'),
             SOUNDS, SOUND_LABELS.map(key => t(key))));
+        const around = new Adw.SwitchRow({
+            title: t('prefs.around'),
+            subtitle: t('prefs.aroundHint'),
+        });
+        settings.bind('tools-around-selection', around, 'active', Gio.SettingsBindFlags.DEFAULT);
+        screenshots.add(around);
         page.add(screenshots);
 
         // Short names in the list, what they mean underneath.
