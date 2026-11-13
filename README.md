@@ -2,7 +2,7 @@
 
 **English** · [Русский](README.ru.md)
 
-A GNOME Shell 50 extension that adds Flameshot-style drawing to the built-in
+A GNOME Shell 50–51 extension that adds Flameshot-style drawing to the built-in
 screenshot tool, and records the screen to AV1 on the GPU. `Print` still opens the
 same native screenshot UI, now with a toolbar.
 
