@@ -19,6 +19,8 @@ interface in Russian; it follows the system language, see [Settings](#settings).
 - Pen, line, arrow, rectangle, ellipse, highlighter, text, pixelate and numbers.
 - Ten colours. Width is set with a slider or the mouse wheel, and every tool keeps its
   own: a thin pen and a thick highlighter do not overwrite each other.
+- A rectangle or an ellipse can be filled with its colour: the bucket button or `F`.
+  Each of the two remembers whether it fills.
 - A click places a number; drag instead and it gets an arrow. Numbering runs across
   all of them.
 - Pixelate hides passwords and anything else that must not end up in the picture. The
@@ -76,6 +78,7 @@ undoes any of it.
 | `Ctrl+S` | save only |
 | `Enter` or the round button | save and copy |
 | `Ctrl+Z`, `Ctrl+Shift+Z` | undo, redo |
+| `F` | fill the rectangle or ellipse, or stop filling it |
 | `Delete` | delete the selected shape |
 | `Esc` | deselect, then close |
 | mouse wheel | width, text size |

@@ -107,12 +107,15 @@ const DEFAULT_WIDTHS = {
 };
 const WIDTH_SAVE_DELAY_MS = 500;
 
+// Tools whose shapes can be filled, each remembering whether it fills.
+const FILLABLE = new Set(['rect', 'ellipse']);
+
 // Thin lines get most of the slider, since that is where most drawing happens.
 const sliderOf = width => Math.sqrt((width - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH));
 const widthOf = value => MIN_WIDTH + value * value * (MAX_WIDTH - MIN_WIDTH);
 
 // Physical key codes (evdev + 8), so shortcuts work on the Russian layout too.
-const KEYCODE = {C: 54, S: 39, V: 55, Y: 29, Z: 52};
+const KEYCODE = {C: 54, F: 41, S: 39, V: 55, Y: 29, Z: 52};
 const DIGIT_1_KEYCODE = 10;
 const DIGIT_0_KEYCODE = 19;
 
@@ -193,6 +196,7 @@ export class Annotator {
         }
         this._saveWidthsId = 0;
         this._syncingWidth = false;
+        this._filled = new Set(settings.get_strv('filled-tools').filter(tool => FILLABLE.has(tool)));
         this._translations = [];
         this._textStyle = this._loadTextStyle();
     }
@@ -644,6 +648,7 @@ export class Annotator {
     }
 
     _syncWidth() {
+        this._syncFill();
         const target = this._widthTarget();
         this._widthSlider.reactive = target !== null;
         this._widthGroup.opacity = target ? 255 : 90;
@@ -681,6 +686,43 @@ export class Annotator {
         this._settings.set_value('tool-widths', new GLib.Variant('a{si}', this._widths));
     }
 
+    // The selected rectangle or ellipse, or else the tool about to draw one.
+    _fillTarget() {
+        const shape = this._selected;
+        if (shape)
+            return FILLABLE.has(shape.type) ? {shape, type: shape.type} : null;
+        return FILLABLE.has(this._tool) ? {shape: null, type: this._tool} : null;
+    }
+
+    // Like the width, a change to a selected shape is also what its tool draws next.
+    _toggleFill() {
+        const target = this._fillTarget();
+        if (!target)
+            return;
+        const {shape, type} = target;
+        const fill = !(shape ? shape.fill : this._filled.has(type));
+
+        if (shape) {
+            this._pushUndo();
+            shape.fill = fill;
+            this._refreshCommitted();
+        }
+        if (fill)
+            this._filled.add(type);
+        else
+            this._filled.delete(type);
+        this._settings.set_strv('filled-tools', [...this._filled]);
+        this._syncFill();
+    }
+
+    _syncFill() {
+        const target = this._fillTarget();
+        this._fillButton.reactive = target !== null;
+        this._fillButton.opacity = target ? 255 : 90;
+        this._fillButton.checked = target
+            ? Boolean(target.shape ? target.shape.fill : this._filled.has(target.type)) : false;
+    }
+
     // Tools; colours and width; undo, redo, copy, save and close. In the bar
     // separators stand between them.
     _buildGroups() {
@@ -710,6 +752,9 @@ export class Annotator {
 
         this._colorGroup.add_child(this._separator());
         this._colorGroup.add_child(this._buildWidthControl());
+        this._fillButton = this._toolButton('fill', 'fill', () => this._toggleFill());
+        this._fillButton.y_align = Clutter.ActorAlign.CENTER;
+        this._colorGroup.add_child(this._fillButton);
 
         // Undo and redo are a group of their own, hidden where there is
         // nothing to draw on.
@@ -1567,6 +1612,8 @@ export class Annotator {
             break;
         default:
             this._current = {...base, type: this._tool, x1: x, y1: y, x2: x, y2: y};
+            if (this._filled.has(this._tool))
+                this._current.fill = true;
         }
 
         this._dragGrab = global.stage.grab(this._catcher);
@@ -1854,6 +1901,10 @@ export class Annotator {
         }
 
         if (this._canAnnotate()) {
+            if (code === KEYCODE.F && this._fillTarget()) {
+                this._toggleFill();
+                return Clutter.EVENT_STOP;
+            }
             if (code === DIGIT_0_KEYCODE) {
                 this._setTool(this._tool === 'select' ? null : 'select');
                 return Clutter.EVENT_STOP;

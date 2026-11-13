@@ -50,5 +50,9 @@
       <default>{}</default>
       <summary>Last used width per drawing tool, by tool id</summary>
     </key>
+    <key name="filled-tools" type="as">
+      <default>[]</default>
+      <summary>Tools that draw filled shapes: rect, ellipse</summary>
+    </key>
   </schema>
 </schemalist>

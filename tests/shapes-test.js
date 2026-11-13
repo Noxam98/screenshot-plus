@@ -193,5 +193,11 @@ check('move', moved.x1 === 110 && moved.y2 === 195 && rect.x1 === 100);
 const movedPen = moveShape(flat, 1, 1);
 check('move is pure', flat.points[0][0] === 10 && movedPen.points[0][0] === 11);
 
+// A filled shape is solid even for the drawing tools, which grab hollow ones by
+// their outline only.
+check('filled rect inside when drawing', hitTest({...rect, fill: true}, 200, 150, true));
+check('filled ellipse centre when drawing', hitTest({...ellipse, fill: true}, 200, 150, true));
+check('filled ellipse corner stays outside', !hitTest({...ellipse, fill: true}, 105, 105, true));
+
 print(failed ? `${failed} FAILED` : 'all shape checks passed');
 exit(failed ? 1 : 0);

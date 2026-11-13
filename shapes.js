@@ -91,6 +91,13 @@ function rectOf({x1, y1, x2, y2}) {
     ];
 }
 
+// A filled shape keeps its outline too, so filling it does not change its size.
+function strokeOrFill(cr, shape) {
+    if (shape.fill)
+        cr.fillPreserve();
+    cr.stroke();
+}
+
 function drawEllipse(cr, shape) {
     const [x, y, w, h] = rectOf(shape);
     setColor(cr, shape.color);
@@ -100,7 +107,7 @@ function drawEllipse(cr, shape) {
     cr.scale(Math.max(w, 0.5) / 2, Math.max(h, 0.5) / 2);
     cr.arc(0, 0, 1, 0, 2 * Math.PI);
     cr.restore();
-    cr.stroke();
+    strokeOrFill(cr, shape);
 }
 
 // Text is laid out once at this size and then only ever scaled, as vector outlines.
@@ -325,7 +332,7 @@ export function drawShape(cr, shape, base = null) {
         setColor(cr, shape.color);
         strokeSetup(cr, shape.width);
         cr.rectangle(x, y, w, h);
-        cr.stroke();
+        strokeOrFill(cr, shape);
         break;
     }
     case 'ellipse':
@@ -491,8 +498,9 @@ function insideBox(shape, px, py) {
 
 // `edgesOnly` makes hollow shapes grabbable by their outline alone. While a
 // drawing tool is active, the inside of the last rectangle must still start a new
-// shape rather than drag the old one.
+// shape rather than drag the old one. A filled one is solid either way.
 export function hitTest(shape, px, py, edgesOnly = false) {
+    edgesOnly &&= !shape.fill;
     const reach = Math.max(HIT_TOLERANCE, shape.width ? shape.width / 2 + 3 : 0);
     switch (shape.type) {
     case 'pen':
