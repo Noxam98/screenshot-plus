@@ -378,7 +378,9 @@ export class Annotator {
         // under a corner of the selection.
         this._hint = new St.Label({style_class: 'splus-cursor-hint', visible: false});
         this._catcher.connect('leave-event', () => {
-            this._hint.hide();
+            // Not when it only let the pointer through to the selection.
+            if (this._catcher.reactive)
+                this._hint.hide();
             return Clutter.EVENT_PROPAGATE;
         });
 
@@ -1664,11 +1666,39 @@ export class Annotator {
         this._hint.show();
     }
 
-    _pressSelection(event, x, y, cursor) {
+    // Where the selection takes a press, the catcher lets the pointer through to
+    // GNOME's own selector, which then does all the rest. Seen from the UI, which
+    // gets every pointer event before the actor under the pointer does.
+    _passToSelection(event) {
+        if (!this._tool || !this._ui.visible || !this._catcher.visible ||
+            this._dragGrab || this._polyline)
+            return Clutter.EVENT_PROPAGATE;
+        // Not over the toolbar, the text being typed and such.
+        const target = global.stage.get_event_actor(event);
+        const selector = this._ui._areaSelector;
+        if (target !== this._catcher && target !== selector) {
+            this._hint.hide();
+            return Clutter.EVENT_PROPAGATE;
+        }
+        const [x, y] = event.get_coords();
+        const cursor = this._selectionTakes(x, y);
+
+        if (event.type() === Clutter.EventType.MOTION) {
+            this._setCatcherReactive(cursor === null);
+            if (cursor !== null)
+                this._showHint(cursor, x, y);
+            return Clutter.EVENT_PROPAGATE;
+        }
+
+        // Picked before the catcher took the pointer back: the press is still
+        // for drawing.
+        if (target === selector && cursor === null)
+            return this._onPress(event);
+        if (target !== selector)
+            return Clutter.EVENT_PROPAGATE;
         this._hint.hide();
         this._commitText();
         this._lastClick = null;
-        const selector = this._ui._areaSelector;
         if (cursor === Clutter.CursorType.CROSSHAIR) {
             this._select(null);
             this._selectionPress = {
@@ -1677,7 +1707,16 @@ export class Annotator {
                 area: [selector._startX, selector._startY, selector._lastX, selector._lastY],
             };
         }
-        return selector._onPress(event, Clutter.BUTTON_PRIMARY, null);
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    // What is under the pointer is picked from the last painted frame, so a
+    // change shows only once the stage paints again.
+    _setCatcherReactive(reactive) {
+        if (this._catcher.reactive === reactive)
+            return;
+        this._catcher.reactive = reactive;
+        this._catcher.queue_redraw();
     }
 
     // On its own a click outside makes a small selection around itself. While
@@ -1702,9 +1741,11 @@ export class Annotator {
             return Clutter.EVENT_PROPAGATE;
 
         const {x, y} = pointerOf(event);
-        const selectionCursor = this._selectionTakes(x, y);
-        if (selectionCursor !== null)
-            return this._pressSelection(event, x, y, selectionCursor);
+        // Only before the pointer has moved there: the next press goes through.
+        if (this._selectionTakes(x, y) !== null) {
+            this._setCatcherReactive(false);
+            return Clutter.EVENT_PROPAGATE;
+        }
         this._hint.hide();
 
         const doubleClick = this._isDoubleClick(event, x, y);
@@ -2104,7 +2145,10 @@ export class Annotator {
     }
 
     _onCapturedEvent(event) {
-        if (event.type() !== Clutter.EventType.KEY_PRESS || !this._ui.visible)
+        const type = event.type();
+        if (type === Clutter.EventType.MOTION || type === Clutter.EventType.BUTTON_PRESS)
+            return this._passToSelection(event);
+        if (type !== Clutter.EventType.KEY_PRESS || !this._ui.visible)
             return Clutter.EVENT_PROPAGATE;
         if (!this._ui._shotButton.checked || Main.sessionMode.isLocked)
             return Clutter.EVENT_PROPAGATE;
