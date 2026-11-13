@@ -55,6 +55,11 @@ parts: the circle moves on its own and the arrow keeps pointing at the same spot
 tip moves on its own too, and dragging the arrow itself moves everything. `Ctrl+Z`
 undoes any of it.
 
+Over the selected shape, and over text while it is typed, a small panel holds what
+that shape has: colours, width, fill for a rectangle or an ellipse, letter size,
+outline and background for text, and a delete button. The bar keeps the same
+controls for the tool.
+
 ## Selection
 
 ![Selection](docs/selection.gif)
