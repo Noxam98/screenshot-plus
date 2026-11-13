@@ -584,6 +584,11 @@ export class Annotator {
                 this._setWidth(widthOf(this._widthSlider.value));
         });
         // The slider's own wheel step is a fraction of a pixel. This is one.
+        // GNOME 51 takes the wheel in scroll controllers, before any handler.
+        for (const action of this._widthSlider.get_actions()) {
+            if (Clutter.ScrollController && action instanceof Clutter.ScrollController)
+                this._widthSlider.remove_action(action);
+        }
         this._widthSlider.connect('scroll-event', (_a, e) => {
             this._onScroll(e);
             return Clutter.EVENT_STOP;
