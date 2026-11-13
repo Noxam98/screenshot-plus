@@ -214,6 +214,16 @@ export class Annotator {
         // Connected before GrabHelper's handler, which is added on every open,
         // so Escape can cancel text entry instead of closing the whole UI.
         this._connect(ui, 'captured-event', (_a, event) => this._onCapturedEvent(event));
+        // GNOME 51 takes Escape in GrabHelper's own key controller instead,
+        // ahead of any handler, and closes by ungrabbing.
+        const grabHelper = ui._grabHelper;
+        const ungrab = grabHelper.ungrab;
+        grabHelper.ungrab = (params = {}) => {
+            if (params.isUser && this._onEscape())
+                return;
+            ungrab.call(grabHelper, params);
+        };
+        this._grabHelper = grabHelper;
 
         for (const button of [
             ui._selectionButton,
@@ -251,6 +261,7 @@ export class Annotator {
     }
 
     destroy() {
+        delete this._grabHelper?.ungrab; // Back to the prototype's.
         this._endDrag();
         this._discardText();
         // Before the later is removed, because this schedules one.
@@ -1986,13 +1997,12 @@ export class Annotator {
         const ctrl = (state & Clutter.ModifierType.CONTROL_MASK) !== 0;
         const shift = (state & Clutter.ModifierType.SHIFT_MASK) !== 0;
 
+        if (symbol === Clutter.KEY_Escape)
+            return this._onEscape() ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
+
         if (this._textActor) {
             if (ctrl && code === KEYCODE.V) {
                 this._pasteIntoText();
-                return Clutter.EVENT_STOP;
-            }
-            if (symbol === Clutter.KEY_Escape) {
-                this._discardText();
                 return Clutter.EVENT_STOP;
             }
             if ((symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) && !shift) {
@@ -2031,11 +2041,6 @@ export class Annotator {
                 this._deleteSelected();
                 return Clutter.EVENT_STOP;
             }
-            // Esc peels off the selection before it closes everything.
-            if (symbol === Clutter.KEY_Escape) {
-                this._select(null);
-                return Clutter.EVENT_STOP;
-            }
         }
 
         if (this._canAnnotate()) {
@@ -2056,6 +2061,22 @@ export class Annotator {
         }
 
         return Clutter.EVENT_PROPAGATE;
+    }
+
+    // Esc takes back the text being typed, then peels off the selected shape,
+    // and only then closes everything.
+    _onEscape() {
+        if (!this._ui.visible)
+            return false;
+        if (this._textActor) {
+            this._discardText();
+            return true;
+        }
+        if (this._selected) {
+            this._select(null);
+            return true;
+        }
+        return false;
     }
 
     // ---- shapes ----
