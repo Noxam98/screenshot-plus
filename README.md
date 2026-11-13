@@ -68,8 +68,11 @@ undoes any of it.
 
 Over the selected shape, and over text while it is typed, a small panel holds what
 that shape has: colours, width, fill for a rectangle or an ellipse, letter size,
-outline and background for text, and a delete button. The bar keeps the same
-controls for the tool.
+outline and background for text, and a delete button. They are only there: the bar
+holds just the tools and the buttons. A new shape is drawn with what was used last,
+and the panel shows up over it as soon as it is drawn, to change it there. A pen or
+highlighter stroke gets the panel too, but no frame, and the next stroke can start
+right on top of it.
 
 ## Selection
 
@@ -123,7 +126,7 @@ Open them from the Extensions app, or with
   native speaker, so corrections are welcome: the strings are in `translations.js`.
 - **Screenshot sound.** Soft click, GNOME's shutter, or none.
 - **Tools around the selection.** Off by default: one bar under the selection. On:
-  the tools, the colours and the undo, copy and save buttons spread over the edges of
+  the tools and the undo, copy and save buttons spread over the edges of
   the selection, like Flameshot's buttons. Along the bottom edge first, as many as fit
   there, the rest on the right, the top and the left; on the sides the tools and the
   buttons stand in a column. A small selection gets them on the next round, further

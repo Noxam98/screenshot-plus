@@ -113,6 +113,8 @@ const WIDTH_SAVE_DELAY_MS = 500;
 
 // Tools whose shapes can be filled, each remembering whether it fills.
 const FILLABLE = new Set(['rect', 'ellipse']);
+// Tools that draw a stroke as the pointer goes.
+const FREEHAND = new Set(['pen', 'marker']);
 
 // Thin lines get most of the slider, since that is where most drawing happens.
 const sliderOf = width => Math.sqrt((width - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH));
@@ -542,9 +544,10 @@ export class Annotator {
         return panel;
     }
 
-    // The same groups show in one of two ways: one bar under the selection, or
-    // with tools-around-selection a panel for each group around it, placed by
-    // toolLayout.js. They move between the two when the setting changes.
+    // Tools and actions show in one of two ways: one bar under the selection, or
+    // with tools-around-selection a panel for each around it, placed by
+    // toolLayout.js. They move between the two when the setting changes. What
+    // changes a shape is only in the panel over it.
     _buildToolbar() {
         this._tooltips = [];
         // Spans the stage, so the panels in it are placed in stage coordinates.
@@ -557,15 +560,11 @@ export class Annotator {
 
         this._buildGroups();
 
-        this._bar = this._panel(Clutter.Orientation.VERTICAL);
-        this._mainRow = new St.BoxLayout({style_class: 'splus-row'});
-        this._barSeparators = [this._separator(), this._separator()];
-        for (const separator of this._barSeparators)
-            this._mainRow.add_child(separator);
-        this._bar.add_child(this._mainRow);
+        this._bar = this._panel();
+        this._barSeparator = this._separator();
+        this._bar.add_child(this._barSeparator);
 
         this._toolPanel = this._panel();
-        this._colorPanel = this._panel(Clutter.Orientation.VERTICAL);
         this._actionPanel = this._panel();
 
         // Over the selected shape, with what can be changed on it.
@@ -588,22 +587,17 @@ export class Annotator {
             return;
         this._around = around;
 
-        for (const group of [this._toolGroup, this._colorGroup, this._actionGroup, this._textRow])
+        for (const group of [this._toolGroup, this._actionGroup])
             group.get_parent()?.remove_child(group);
         this._setUpright([this._toolGroup], [], false);
         this._setUpright([this._actionGroup, this._undoGroup], [this._undoSeparator], false);
 
         if (around) {
             this._toolPanel.add_child(this._toolGroup);
-            this._colorPanel.add_child(this._colorGroup);
-            this._colorPanel.add_child(this._textRow);
             this._actionPanel.add_child(this._actionGroup);
         } else {
-            const [first] = this._barSeparators;
-            this._mainRow.insert_child_below(this._toolGroup, first);
-            this._mainRow.insert_child_above(this._colorGroup, first);
-            this._mainRow.add_child(this._actionGroup);
-            this._bar.add_child(this._textRow);
+            this._bar.insert_child_below(this._toolGroup, this._barSeparator);
+            this._bar.add_child(this._actionGroup);
         }
     }
 
@@ -717,22 +711,21 @@ export class Annotator {
             ? clamp(Math.round(this._widthOfTarget(target)), MIN_WIDTH, MAX_WIDTH) : 0;
         const color = target?.shape?.color ?? this._color;
         const size = Math.min(22, 3 + width);
-        for (const set of this._sets) {
-            set.widthSlider.reactive = target !== null;
-            set.widthGroup.opacity = target ? 255 : 90;
-            if (!target) {
-                set.widthLabel.text = '';
-                set.widthDot.set_style('width: 0; height: 0;');
-                continue;
-            }
-            this._syncingWidth = true;
-            set.widthSlider.value = sliderOf(width);
-            this._syncingWidth = false;
-            set.widthLabel.text = String(width);
-            set.widthDot.set_style(
-                `background-color: ${color}; width: ${size}px; height: ${size}px; ` +
-                `border-radius: ${size / 2}px; border: 1px solid rgba(255,255,255,0.5);`);
+        const set = this._shapeSet;
+        set.widthSlider.reactive = target !== null;
+        set.widthGroup.opacity = target ? 255 : 90;
+        if (!target) {
+            set.widthLabel.text = '';
+            set.widthDot.set_style('width: 0; height: 0;');
+            return;
         }
+        this._syncingWidth = true;
+        set.widthSlider.value = sliderOf(width);
+        this._syncingWidth = false;
+        set.widthLabel.text = String(width);
+        set.widthDot.set_style(
+            `background-color: ${color}; width: ${size}px; height: ${size}px; ` +
+            `border-radius: ${size / 2}px; border: 1px solid rgba(255,255,255,0.5);`);
     }
 
     // Writing on every pixel of a slider drag would be pointless disk traffic.
@@ -783,15 +776,14 @@ export class Annotator {
         const target = this._fillTarget();
         const filled = target
             ? Boolean(target.shape ? target.shape.fill : this._filled.has(target.type)) : false;
-        for (const {fillButton} of this._sets) {
-            fillButton.reactive = target !== null;
-            fillButton.opacity = target ? 255 : 90;
-            fillButton.checked = filled;
-        }
+        const {fillButton} = this._shapeSet;
+        fillButton.reactive = target !== null;
+        fillButton.opacity = target ? 255 : 90;
+        fillButton.checked = filled;
     }
 
-    // Tools; colours and width; undo, redo, copy, save and close. In the bar
-    // separators stand between them.
+    // Tools; undo, redo, copy, save, pin and close; and what changes a shape,
+    // for the panel over it.
     _buildGroups() {
         this._toolGroup = new St.BoxLayout({style_class: 'splus-group'});
         this._toolButtons = new Map();
@@ -803,11 +795,7 @@ export class Annotator {
             this._toolGroup.add_child(button);
         }
 
-        this._mainSet = this._buildModifiers();
-        this._shapeSet = this._buildModifiers({withDelete: true});
-        this._sets = [this._mainSet, this._shapeSet];
-        this._colorGroup = this._mainSet.colorGroup;
-        this._textRow = this._mainSet.textRow;
+        this._shapeSet = this._buildModifiers();
 
         // Undo and redo are a group of their own, hidden where there is
         // nothing to draw on.
@@ -837,11 +825,10 @@ export class Annotator {
         }));
     }
 
-    // What changes a shape: colours, width, fill, and the text settings in a row
-    // under them. The bar has a set for the tool about to draw and the selected
-    // shape, and the panel over the selected shape has one of its own. Both show
-    // the same values.
-    _buildModifiers({withDelete = false} = {}) {
+    // What changes a shape: colours, width, fill and delete, and the text
+    // settings in a row under them. A new shape takes the values it shows, so
+    // they are the last ones used.
+    _buildModifiers() {
         const set = {colorButtons: new Map()};
         set.colorGroup = new St.BoxLayout({style_class: 'splus-group'});
         set.palette = new St.BoxLayout({style_class: 'splus-group'});
@@ -886,16 +873,14 @@ export class Annotator {
         set.fillButton.y_align = Clutter.ActorAlign.CENTER;
         set.colorGroup.add_child(set.fillButton);
 
-        if (withDelete) {
-            set.deleteSeparator = this._separator();
-            set.colorGroup.add_child(set.deleteSeparator);
-            set.deleteButton = this._toolButton('delete', 'delete', () => {
-                if (this._selected)
-                    this._deleteSelected();
-            });
-            set.deleteButton.y_align = Clutter.ActorAlign.CENTER;
-            set.colorGroup.add_child(set.deleteButton);
-        }
+        set.deleteSeparator = this._separator();
+        set.colorGroup.add_child(set.deleteSeparator);
+        set.deleteButton = this._toolButton('delete', 'delete', () => {
+            if (this._selected)
+                this._deleteSelected();
+        });
+        set.deleteButton.y_align = Clutter.ActorAlign.CENTER;
+        set.colorGroup.add_child(set.deleteButton);
 
         set.textRow = new St.BoxLayout({style_class: 'splus-row splus-text-row', visible: false});
         this._buildTextRow(set);
@@ -1043,13 +1028,10 @@ export class Annotator {
         this._catcher.visible = annotate && !this._selectionDragging;
         this._drawing.visible = annotate;
         this._toolGroup.visible = annotate;
-        this._colorGroup.visible = annotate;
         this._undoGroup.visible = annotate;
-        for (const separator of this._barSeparators)
-            separator.visible = annotate;
+        this._barSeparator.visible = annotate;
         this._bar.visible = !this._around;
         this._toolPanel.visible = this._around && annotate;
-        this._colorPanel.visible = this._around && annotate;
         this._actionPanel.visible = this._around;
 
         this._toolbar.visible = ui.visible && ui._shotButton.checked &&
@@ -1197,8 +1179,6 @@ export class Annotator {
         const groups = [];
         if (this._toolPanel.visible)
             groups.push(turning('tools', this._toolPanel, [this._toolGroup], []));
-        if (this._colorPanel.visible)
-            groups.push({id: 'colors', panel: this._colorPanel, row: sizeOf(this._colorPanel), column: null});
         if (this._actionPanel.visible) {
             groups.push(turning('actions', this._actionPanel,
                 [this._actionGroup, this._undoGroup], [this._undoSeparator]));
@@ -1238,7 +1218,7 @@ export class Annotator {
         // Text grows to the right while it is typed, so its panel stays put.
         const x = clamp(shape.type === 'text' ? left : (left + right - width) / 2, minX, maxX);
         // Clear of the toolbar too, where there is a choice.
-        const panels = [this._bar, this._toolPanel, this._colorPanel, this._actionPanel]
+        const panels = [this._bar, this._toolPanel, this._actionPanel]
             .filter(panel => panel.visible).map(panel => {
                 // Placed just now, which the allocation does not show yet.
                 const [, , pw, ph] = panel.get_preferred_size();
@@ -1262,10 +1242,10 @@ export class Annotator {
             button.checked = toolId === id;
 
         // Keep the selection when going to the tool that edits it, or to text
-        // when text is what is selected.
+        // when text is what is selected. Selecting again shows the frame a
+        // stroke had none of under the pen.
         const keepSelection = id === 'select' || (id === 'text' && this._selected?.type === 'text');
-        if (!keepSelection)
-            this._select(null);
+        this._select(keepSelection ? this._selected : null);
 
         const ui = this._ui;
         const active = id !== null;
@@ -1370,59 +1350,55 @@ export class Annotator {
     _syncColor() {
         const active = this._activeColor();
         const custom = this._customColor;
-        for (const {colorButtons, customButton, pipetteButton} of this._sets) {
-            for (const [color, button] of colorButtons)
-                button.checked = color === active;
-            customButton.visible = custom !== null;
-            if (custom)
-                customButton.set_style(`background-color: ${custom};`);
-            customButton.checked = custom !== null && custom === active && !colorButtons.has(custom);
-            pipetteButton.checked = this._picking;
-        }
+        const {colorButtons, customButton, pipetteButton} = this._shapeSet;
+        for (const [color, button] of colorButtons)
+            button.checked = color === active;
+        customButton.visible = custom !== null;
+        if (custom)
+            customButton.set_style(`background-color: ${custom};`);
+        customButton.checked = custom !== null && custom === active && !colorButtons.has(custom);
+        pipetteButton.checked = this._picking;
 
         this._syncWidth();
     }
 
+    // Under the colours in the panel over text, while text is typed or selected.
     _syncTextRow() {
-        const show = this._textContext() && this._canAnnotate();
-        const over = this._shapeBar.visible && this._shapeBarTarget()?.type === 'text';
-        for (const set of this._sets) {
-            const visible = show && (set === this._mainSet || over);
-            if (set.textRow.visible !== visible) {
-                set.textRow.visible = visible;
-                this._schedulePlacement();
-            }
+        const set = this._shapeSet;
+        const visible = this._textContext() && this._canAnnotate() &&
+            this._shapeBar.visible && this._shapeBarTarget()?.type === 'text';
+        if (set.textRow.visible !== visible) {
+            set.textRow.visible = visible;
+            this._schedulePlacement();
         }
-        if (!show)
+        if (!visible)
             return;
 
         const style = this._readStyle();
-        for (const set of this._sets) {
-            const paint = (slot, color) => {
-                const {button, swatch} = set.slots[slot];
-                button.checked = this._slot === slot;
-                swatch.set_style(color
-                    ? `background-color: ${color};`
-                    : 'background-color: transparent; border-style: dashed;');
-            };
-            paint('text', style.color);
-            paint('outline', style.outlineColor);
-            paint('bg', style.bgColor);
+        const paint = (slot, color) => {
+            const {button, swatch} = set.slots[slot];
+            button.checked = this._slot === slot;
+            swatch.set_style(color
+                ? `background-color: ${color};`
+                : 'background-color: transparent; border-style: dashed;');
+        };
+        paint('text', style.color);
+        paint('outline', style.outlineColor);
+        paint('bg', style.bgColor);
 
-            set.noneButton.visible = this._slot !== 'text';
-            set.noneButton.checked = (this._slot === 'outline' && !style.outlineColor) ||
-                (this._slot === 'bg' && !style.bgColor);
+        set.noneButton.visible = this._slot !== 'text';
+        set.noneButton.checked = (this._slot === 'outline' && !style.outlineColor) ||
+            (this._slot === 'bg' && !style.bgColor);
 
-            set.sizeStepper.value.text = String(Math.round(style.fontPx));
-            set.outlineStepper.box.visible = Boolean(style.outlineColor);
-            set.outlineStepper.value.text = String(style.outlineWidth);
-            set.alphaStepper.box.visible = Boolean(style.bgColor);
-            set.alphaStepper.value.text = `${Math.round(style.bgAlpha * 100)}%`;
-            set.bgHeightStepper.box.visible = Boolean(style.bgColor);
-            set.bgHeightStepper.value.text = `${Math.round(style.bgPadY * 100)}%`;
-            set.bgWidthStepper.box.visible = Boolean(style.bgColor);
-            set.bgWidthStepper.value.text = `${Math.round(style.bgPadX * 100)}%`;
-        }
+        set.sizeStepper.value.text = String(Math.round(style.fontPx));
+        set.outlineStepper.box.visible = Boolean(style.outlineColor);
+        set.outlineStepper.value.text = String(style.outlineWidth);
+        set.alphaStepper.box.visible = Boolean(style.bgColor);
+        set.alphaStepper.value.text = `${Math.round(style.bgAlpha * 100)}%`;
+        set.bgHeightStepper.box.visible = Boolean(style.bgColor);
+        set.bgHeightStepper.value.text = `${Math.round(style.bgPadY * 100)}%`;
+        set.bgWidthStepper.box.visible = Boolean(style.bgColor);
+        set.bgWidthStepper.value.text = `${Math.round(style.bgPadX * 100)}%`;
 
         // Steppers appearing change the row's width.
         this._schedulePlacement();
@@ -1633,7 +1609,7 @@ export class Annotator {
 
     _updateOverlay() {
         this._syncShapeBar();
-        if (!this._selected || this._textActor) {
+        if (!this._grabbable() || this._textActor) {
             this._overlay.hide();
             return;
         }
@@ -1701,10 +1677,18 @@ export class Annotator {
 
     // ---- input ----
 
+    // A freehand stroke is selected once drawn, for the panel over it, but while
+    // the pen or the marker is in hand it shows no frame and takes no presses,
+    // so the next stroke can start anywhere, on top of it too.
+    _grabbable() {
+        return FREEHAND.has(this._tool) ? null : this._selected;
+    }
+
     _handleAt(x, y) {
-        if (!this._selected)
+        const shape = this._grabbable();
+        if (!shape)
             return null;
-        return handlesOf(this._selected).find(h =>
+        return handlesOf(shape).find(h =>
             Math.hypot(h.x - x, h.y - y) <= HANDLE_GRAB) ?? null;
     }
 
@@ -1851,7 +1835,8 @@ export class Annotator {
             return Clutter.EVENT_STOP;
         }
 
-        if (this._selected && hitTest(this._selected, x, y, edgesOnly)) {
+        const grabbable = this._grabbable();
+        if (grabbable && hitTest(grabbable, x, y, edgesOnly)) {
             if (doubleClick && this._selected.type === 'text') {
                 this._editText(this._selected);
                 return Clutter.EVENT_STOP;
@@ -1955,9 +1940,9 @@ export class Annotator {
             cursor = HANDLE_CURSORS[handle.id] ?? Clutter.CursorType.CROSSHAIR;
         } else if (selectionCursor !== null) {
             cursor = selectionCursor;
-        } else if (this._selected) {
+        } else if (this._grabbable()) {
             const edgesOnly = this._tool !== 'select' && this._tool !== 'text';
-            if (hitTest(this._selected, x, y, edgesOnly))
+            if (hitTest(this._grabbable(), x, y, edgesOnly))
                 cursor = Clutter.CursorType.MOVE;
         } else if (this._tool === 'select' && this._shapes.some(s => hitTest(s, x, y))) {
             cursor = Clutter.CursorType.MOVE;
@@ -1998,10 +1983,8 @@ export class Annotator {
         // A click without a drag leaves nothing visible for box-like shapes.
         const empty = !shape.points && shape.type !== 'counter' &&
             shape.x1 === shape.x2 && shape.y1 === shape.y2;
-        if (!empty) {
-            // Freehand strokes stay unselected so the next one can start anywhere.
-            this._commit(shape, !shape.points);
-        }
+        if (!empty)
+            this._commit(shape, true);
 
         return Clutter.EVENT_STOP;
     }
