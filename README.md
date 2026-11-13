@@ -33,6 +33,10 @@ interface in Russian; it follows the system language, see [Settings](#settings).
 - Pixelate hides passwords and anything else that must not end up in the picture. The
   file holds only the blocks there, none of the original pixels.
 - `Shift` while drawing gives exact 45° steps and squares.
+- The pin button (`Ctrl+P`) leaves the picture on top of the windows, right where the
+  selection was and at the same size, as Flameshot does. Drag it anywhere, zoom it with
+  the wheel, make it see-through with `Ctrl` and the wheel. The right button gives
+  copy, save and close; a double-click closes it.
 - Copy and save are separate. The window closes the moment you press either, and the
   image is finished in the background. If saving fails, the image is left on the
   clipboard and a notification says so.
@@ -92,6 +96,7 @@ controls for the tool.
 | `0` | select: pick up what is already drawn |
 | `Ctrl+C` | copy only |
 | `Ctrl+S` | save only |
+| `Ctrl+P` | pin on top of the windows |
 | `Enter` or the round button | save and copy |
 | `Ctrl+Z`, `Ctrl+Shift+Z` | undo, redo |
 | `F` | fill the rectangle or ellipse, or stop filling it |

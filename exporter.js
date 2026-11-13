@@ -274,7 +274,7 @@ function getSource() {
     return notificationSource;
 }
 
-function notify(pixbuf, file, copied, time) {
+export function imageContentOf(pixbuf) {
     const coglContext = global.stage.context.get_backend().get_cogl_context();
     const content = St.ImageContent.new_with_preferred_size(pixbuf.width, pixbuf.height);
     content.set_bytes(
@@ -284,6 +284,11 @@ function notify(pixbuf, file, copied, time) {
         pixbuf.width,
         pixbuf.height,
         pixbuf.rowstride);
+    return content;
+}
+
+function notify(pixbuf, file, copied, time) {
+    const content = imageContentOf(pixbuf);
 
     const notification = new MessageTray.Notification({
         source: getSource(),
@@ -412,6 +417,37 @@ export async function finishExport(ui, job, {copy, save, rescue = false}) {
     // Keeps the screenshot portal working: it waits on this signal for the file.
     if (file)
         ui.emit('screenshot-taken', file);
+
+    return result;
+}
+
+// For an image already made, such as a pinned one: {bytes, pixbuf}.
+export function copyImage({bytes, pixbuf}) {
+    St.Clipboard.get_default().set_content(St.ClipboardType.CLIPBOARD, 'image/png', bytes);
+    notify(pixbuf, null, true, GLib.DateTime.new_now_local());
+}
+
+export function saveImage({bytes, pixbuf}) {
+    const lockdown = new Gio.Settings({schema_id: 'org.gnome.desktop.lockdown'});
+    if (lockdown.get_boolean('disable-save-to-disk'))
+        return;
+    const time = GLib.DateTime.new_now_local();
+    try {
+        notify(pixbuf, saveToDisk(bytes, time), false, time);
+    } catch (e) {
+        logError(e, 'screenshot-plus: save failed');
+        Main.notifyError(t('error.save'), e.message);
+    }
+}
+
+// Pixels of the picture the export makes per stage pixel.
+export function captureScale(ui) {
+    if (!ui._windowButton.checked)
+        return ui._scale;
+    const window = ui._windowSelectors
+        .flatMap(selector => selector.windows())
+        .find(win => win.checked);
+    return window?.bufferScale ?? ui._scale;
 }
 
 // Captures part of the frozen screen, [x, y, w, h] in stage coordinates, for the

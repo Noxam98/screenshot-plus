@@ -269,3 +269,13 @@
 .splus-magnifier-line {
   spacing: 6px;
 }
+
+/* A screenshot pinned on top of the windows. */
+.splus-pin {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+}
+
+.splus-pin:hover {
+  border-color: #3584e4;
+}

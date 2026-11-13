@@ -16,9 +16,10 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Tooltip} from 'resource:///org/gnome/shell/ui/screenshot.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
-import {beginExport, captureBase, colorAt, finishExport} from './exporter.js';
+import {beginExport, captureBase, captureScale, colorAt, finishExport} from './exporter.js';
 import {t} from './i18n.js';
 import {Magnifier} from './magnifier.js';
+import {Pins} from './pin.js';
 import {
     MAX_FONT,
     MAX_RADIUS,
@@ -118,7 +119,7 @@ const sliderOf = width => Math.sqrt((width - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH
 const widthOf = value => MIN_WIDTH + value * value * (MAX_WIDTH - MIN_WIDTH);
 
 // Physical key codes (evdev + 8), so shortcuts work on the Russian layout too.
-const KEYCODE = {C: 54, F: 41, I: 31, S: 39, V: 55, Y: 29, Z: 52};
+const KEYCODE = {C: 54, F: 41, I: 31, P: 33, S: 39, V: 55, Y: 29, Z: 52};
 const DIGIT_1_KEYCODE = 10;
 const DIGIT_0_KEYCODE = 19;
 
@@ -214,6 +215,7 @@ export class Annotator {
         this._filled = new Set(settings.get_strv('filled-tools').filter(tool => FILLABLE.has(tool)));
         this._translations = [];
         this._textStyle = this._loadTextStyle();
+        this._pins = new Pins();
     }
 
     enable() {
@@ -312,6 +314,7 @@ export class Annotator {
         this._hint.destroy();
         this._magnifier.destroy();
         this._toolbar.destroy();
+        this._pins.destroy();
         for (const tooltip of this._tooltips) {
             tooltip.close(); // Cancels its pending show timeout.
             tooltip.destroy();
@@ -824,8 +827,11 @@ export class Annotator {
         this._saveButton = this._toolButton('save', 'save', () => {
             this._exportAndClose({copy: false, save: true});
         }, 'splus-tool splus-action');
+        this._pinButton = this._toolButton('pin', 'pin', () => this._pinAndClose(),
+            'splus-tool splus-action');
         this._actionGroup.add_child(this._copyButton);
         this._actionGroup.add_child(this._saveButton);
+        this._actionGroup.add_child(this._pinButton);
         this._actionGroup.add_child(this._toolButton('close', 'close', () => {
             this._ui.close();
         }));
@@ -2371,6 +2377,9 @@ export class Annotator {
             case KEYCODE.S:
                 this._exportAndClose({copy: false, save: true});
                 return Clutter.EVENT_STOP;
+            case KEYCODE.P:
+                this._pinAndClose();
+                return Clutter.EVENT_STOP;
             case KEYCODE.Z:
                 if (shift)
                     this._redo();
@@ -2671,6 +2680,40 @@ export class Annotator {
 
         return finishExport(this._ui, job, {...options, rescue: true}).catch(e => {
             logError(e, 'screenshot-plus: export failed');
+            Main.notifyError(t('error.capture'), e.message);
+        });
+    }
+
+    // The picture goes on top of the windows, where the selection was, at the same
+    // size. In window mode there is no such place, so it goes in the middle of
+    // the monitor with the pointer.
+    _pinAndClose() {
+        this._commitText();
+        this._finishPolyline();
+        this._stopPicking();
+        // An app is waiting for a file instead.
+        if (this._ui._currentMode === UI_MODE_SCREENSHOT_ONLY)
+            return Promise.resolve();
+
+        const rect = this._selection();
+        const scale = captureScale(this._ui);
+        const job = beginExport(this._ui, this._shapes);
+        if (!job)
+            return Promise.resolve();
+        this._ui.close(true);
+
+        return finishExport(this._ui, job, {copy: false, save: false}).then(image => {
+            const width = image.pixbuf.width / scale;
+            const height = image.pixbuf.height / scale;
+            let [x, y] = rect ?? [];
+            if (!rect) {
+                const monitor = Main.layoutManager.currentMonitor;
+                x = monitor.x + (monitor.width - width) / 2;
+                y = monitor.y + (monitor.height - height) / 2;
+            }
+            this._pins.add(image, [x, y, width, height]);
+        }).catch(e => {
+            logError(e, 'screenshot-plus: pin failed');
             Main.notifyError(t('error.capture'), e.message);
         });
     }
